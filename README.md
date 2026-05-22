@@ -1,38 +1,41 @@
 # Unity_Lidar_Sim
-A simple simulator for simulating LiDAR and publishing the point cloud to ros1.
+A simple simulator for simulating LiDAR and publishing the point cloud to ROS2.
 
 ## References
 I used the following resources to build this simulator:
 
 [ROS-TCP-Connector](https://github.com/Unity-Technologies/ROS-TCP-Connector)
 
-[ROS-TCP-Connector](https://github.com/Unity-Technologies/ROS-TCP-Endpoint)
+[ROS-TCP-Endpoint](https://github.com/Unity-Technologies/ROS-TCP-Endpoint)
 
 [ROS Unity Integration](https://github.com/Unity-Technologies/Unity-Robotics-Hub/blob/main/tutorials/ros_unity_integration/README.md)
 
 [unity_ros_lidar_3d](https://github.com/sudhirpratapyadav/unity_ros_lidar_3d) (This is a ROS2 implementation with connection to other ROS packages we don't need)
 
 ## Setting up
+What's in this Repo:
+* ROS-TCP-Endpoint just has the ROS2 branch of the endpoint repo
+* uity_ros_lidar is the Unity Project
+
 For Unity:
 * First, install [Unity Hub](https://docs.unity3d.com/hub/manual/InstallHub.html#install-hub-linux) on your computer.
-* Open up Unity Hub, but don't install the recommended Unity Editor. The default project was created using 2021.3.16f1. Go to Install Editor and choose the one that starts with "2021.3" to avoid too much compatibility issue. (Any version after 2020 should in theory work, but this has not been tested)
+* Open up Unity Hub, and install a version of Unity Editor. The project was edited using 2021.3.16f1 and later opened using version 6.3. There doesn't seem to be much compatibility issues.
 * Once the installation completes, open the Unity project from repo. In Unity Hub, click "Add" --> "Add project from disk", and select the **"unity_ros_lidar"** inside this repo and click "Add Project".
 * Once the project loads, in the Assets panel below, double-click on "Scenes" and "Sample Scene". On the right, you should see these objects in the project.
 
   <img width="1370" height="653" alt="image" src="https://github.com/user-attachments/assets/e88d4f6f-68d8-48b3-a050-99ead7190d57" />
 
 For ROS:
-* create and build a catkin workspace with the following structure:
+* create and build a workspace with the following structure:
   ```
-  catkin_ws/
+  ws_UnitySim/
     src/
       ROS-TCP-Endpoint/
       .../ (other ROS pakcages)
-    view_lidar.rviz
   ```
 ## Running the simulator
 
-* `roslaunch ros_tcp_endpoint endpoint.launch`
+* `ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=127.0.0.1`
 
 * Click on the play button in Unity to start the sim.
 
@@ -40,9 +43,11 @@ For ROS:
 
   <img width="312" height="34" alt="image" src="https://github.com/user-attachments/assets/7767b66a-19bc-41cd-b579-9eaf2243ddf2" />
 
-* Finally, visualize the lidar points by running `rviz -d view_lidar.rviz`.
+* Finally, visualize the lidar points by rviz. (You might want to increase the point size.)
 
 ## Notes
+
+* TODO: Currently the `point_cloud` topic seems to have the points in the world coordinate and not lidar coordinates. This still needs to be fixed.
 
 * In the example, the ego vehicle is the game object called "Airplane". The LiDAR sensor is located at the "laser_link" object.
 
