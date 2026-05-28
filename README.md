@@ -28,13 +28,13 @@ For Unity:
 For ROS:
 * create and build a workspace with the following structure:
   ```
-  ws_UnitySim/
+  ws_Unity/
     src/
       ROS-TCP-Endpoint/
       .../ (other ROS pakcages)
   ```
 ## Running the simulator
-
+* Go to `ws_Unity` work space folder, and run `source install/local_setup.bash`.
 * `ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=127.0.0.1`
 
 * Click on the play button in Unity to start the sim.
@@ -44,6 +44,10 @@ For ROS:
   <img width="312" height="34" alt="image" src="https://github.com/user-attachments/assets/7767b66a-19bc-41cd-b579-9eaf2243ddf2" />
 
 * Finally, visualize the lidar points by rviz. (You might want to increase the point size.)
+  * Run `rviz2`.
+  * On the "Displays" panel on the left, click "Add".
+  * under "By topic", select "/point_cloud/PointCloud2".
+  * Back to the "Display" panel, change the point cloud size to 0.05 m.
 
 ## Notes
 
