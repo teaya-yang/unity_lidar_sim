@@ -49,6 +49,13 @@ For ROS:
   * under "By topic", select "/point_cloud/PointCloud2".
   * Back to the "Display" panel, change the point cloud size to 0.05 m.
 
+
+## External dynamics 
+* A python code @scripts/trajectory_publisher.py is generating the trajectory of the ambulance and publishing it as a ROS2 topic `/ambulance/trajectory`.
+* @unity_ros_lidar/Assets/Scripts/AmbulanceTrajectorySubscriber.cs listens to the topic and move the ambulance in unity. In unity editor, click the `Ambulance_no_damage` object and make sure the `AmbulanceTrajectorySubscriber` script is attached and enabled. 
+* First run the @scripts/trajectory_publisher.py by `python3 trajectory_publisher.py`, then start the unity. You would see the ambulance is moving accordingly.
+
+
 ## Notes
 
 * TODO: Currently the `point_cloud` topic seems to have the points in the world coordinate and not lidar coordinates. This still needs to be fixed.

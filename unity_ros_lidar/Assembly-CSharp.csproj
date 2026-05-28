@@ -50,6 +50,7 @@
   <ItemGroup>
     <Compile Include="Assets/Scripts/PointCloudPublisher.cs" />
     <Compile Include="Assets/Scripts/TransformTreeNode.cs" />
+    <Compile Include="Assets/Scripts/AmbulanceTrajectorySubscriber.cs" />
     <Compile Include="Assets/Scripts/TimeStamp.cs" />
     <Compile Include="Assets/Scripts/SmoothFollow.cs" />
     <Compile Include="Assets/Scripts/MoveAlongAxis.cs" />
