@@ -34,7 +34,6 @@ For ROS:
       .../ (other ROS pakcages)
   ```
 ## Running the simulator
-* Go to `ws_Unity` work space folder and build the package with `colcon build --symlink-install`
 * Go to `ws_Unity` work space folder, and run `source install/local_setup.bash`.
 * `ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=127.0.0.1`
 

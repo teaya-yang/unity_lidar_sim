@@ -1,20 +1,33 @@
 #!/usr/bin/env python3
-"""Publishes a constant-velocity-forward trajectory for the ambulance.
+"""Abstract trajectory publisher for the ambulance.
 
-Standalone ROS2 node (no colcon package needed). Run after sourcing your ROS2
-workspace:
+Publishes geometry_msgs/PoseStamped on /ambulance/trajectory.  The pose is a
+displacement from the ambulance's starting position; the Unity subscriber
+applies it relative to the ambulance's spawn transform.
 
+Trajectory logic and parameters live in trajectories.py.  Edit that file to
+tune speeds, radii, etc.  This node only controls publishing mechanics.
+
+Usage
+-----
     python3 scripts/trajectory_publisher.py
-    python3 scripts/trajectory_publisher.py --ros-args -p velocity:=2.0
+    python3 scripts/trajectory_publisher.py --ros-args -p scenario:=circle
+    python3 scripts/trajectory_publisher.py --ros-args -p scenario:=accel_decel -p publish_rate:=50.0
 
-It emits a geometry_msgs/PoseStamped whose position.x grows as velocity * t
-(+x is forward in the ROS FLU convention) and whose yaw grows as
-angular_velocity * t (rotation about +z / up). The Unity
-AmbulanceTrajectorySubscriber treats this pose as a displacement from the
-ambulance's starting position.
+Parameters
+----------
+scenario     : str   – key from trajectories.SCENARIOS  (default: straight)
+topic        : str   – ROS topic to publish on          (default: /ambulance/trajectory)
+frame_id     : str   – header frame                     (default: map)
+publish_rate : float – Hz                               (default: 20.0)
 """
 
 import math
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from trajectories import SCENARIOS
 
 import rclpy
 from rclpy.node import Node
@@ -25,41 +38,48 @@ class TrajectoryPublisher(Node):
     def __init__(self):
         super().__init__("trajectory_publisher")
 
-        self.declare_parameter("velocity", -5.0)         # m/s, forward (+x)
-        self.declare_parameter("angular_velocity", 0.2)   # rad/s, yaw (about +z)
-        self.declare_parameter("publish_rate", 20.0)      # Hz
+        self.declare_parameter("scenario", "straight")
         self.declare_parameter("topic", "/ambulance/trajectory")
         self.declare_parameter("frame_id", "map")
+        self.declare_parameter("publish_rate", 20.0)
 
-        self.velocity = self.get_parameter("velocity").value
-        self.angular_velocity = self.get_parameter("angular_velocity").value
-        self.frame_id = self.get_parameter("frame_id").value
+        scenario_name = self.get_parameter("scenario").value
         topic = self.get_parameter("topic").value
+        self.frame_id = self.get_parameter("frame_id").value
         publish_rate = self.get_parameter("publish_rate").value
+
+        if scenario_name not in SCENARIOS:
+            self.get_logger().fatal(
+                f"Unknown scenario '{scenario_name}'. "
+                f"Valid choices: {list(SCENARIOS.keys())}"
+            )
+            raise SystemExit(1)
+
+        self.trajectory = SCENARIOS[scenario_name]
 
         self.publisher = self.create_publisher(PoseStamped, topic, 10)
         self.start_time = self.get_clock().now()
         self.create_timer(1.0 / publish_rate, self.timer_callback)
 
         self.get_logger().info(
-            f"Publishing PoseStamped on '{topic}' at {publish_rate} Hz, "
-            f"velocity {self.velocity} m/s (+x forward), "
-            f"angular_velocity {self.angular_velocity} rad/s (yaw)."
+            f"TrajectoryPublisher ready: scenario='{scenario_name}' "
+            f"on '{topic}' at {publish_rate} Hz"
         )
 
     def timer_callback(self):
         now = self.get_clock().now()
-        elapsed = (now - self.start_time).nanoseconds * 1e-9  # seconds
+        t = (now - self.start_time).nanoseconds * 1e-9
+
+        x, y, yaw = self.trajectory(t)
 
         msg = PoseStamped()
         msg.header.stamp = now.to_msg()
         msg.header.frame_id = self.frame_id
-        msg.pose.position.x = self.velocity * elapsed
-        msg.pose.position.y = 0.0
+        msg.pose.position.x = x
+        msg.pose.position.y = y
         msg.pose.position.z = 0.0
-
-        # Constant yaw about +z (up in FLU): quaternion for rotation `yaw` about z.
-        yaw = self.angular_velocity * elapsed
+        msg.pose.orientation.x = 0.0
+        msg.pose.orientation.y = 0.0
         msg.pose.orientation.z = math.sin(yaw / 2.0)
         msg.pose.orientation.w = math.cos(yaw / 2.0)
 
