@@ -4,3 +4,6 @@ Temp/
 obj/
 Builds/
 UserSettings/
+*.csproj
+*.sln
+*.slnx

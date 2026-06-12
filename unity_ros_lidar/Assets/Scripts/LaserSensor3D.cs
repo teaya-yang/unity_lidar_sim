@@ -115,7 +115,9 @@ public class LaserSensor3D
         {
             for (int j = 0; j < NumMeasurementsPerScan_v; j++)
             {
+                // azimuth
                 var theta = Mathf.Deg2Rad*scanAngleArray_h[i];
+                // elevation
                 var psi = Mathf.Deg2Rad*scanAngleArray_v[j];
                 var local_dir_vec = new Vector3(Mathf.Cos(psi)*Mathf.Sin(theta), -Mathf.Sin(psi), Mathf.Cos(psi)*Mathf.Cos(theta));
                 var directionVector = sensor_transform.rotation * local_dir_vec;

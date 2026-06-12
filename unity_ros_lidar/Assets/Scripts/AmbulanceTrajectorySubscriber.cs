@@ -32,7 +32,10 @@ public class AmbulanceTrajectorySubscriber : MonoBehaviour
             m_Initialized = true;
         }
 
+        // convert position from FLU coordinate system use in ROS
+        // ex: (x=3, y=0, z=0) FLU -> (x=0,y=0,z=3)
         Vector3 offset = msg.pose.position.From<FLU>();
+        // rigid transformation
         Vector3 newPos = m_InitialPosition + m_InitialRotation * offset;
 
         // Derive heading from velocity — avoids the handedness error From<FLU>() introduces
