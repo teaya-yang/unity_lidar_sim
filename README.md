@@ -37,8 +37,9 @@ For ROS:
   `ln -s ./Unity_Lidar_Sim/ROS-TCP-Endpoint ./ws_Unity/src/ROS-TCP-Endpoint`
 
 ## Running the simulator
-* Go to `ws_Unity` work space folder, and run `source install/local_setup.bash`.
-* `ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=127.0.0.1`
+* Go to `ws_Unity` and build the package with `colcon build`.
+* Run `source install/local_setup.bash`.
+* To start the ros2 connection with unity `ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=127.0.0.1`
 
 * Click on the play button in Unity to start the sim.
 
