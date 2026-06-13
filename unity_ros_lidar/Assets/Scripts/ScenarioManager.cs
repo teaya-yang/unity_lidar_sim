@@ -9,7 +9,7 @@ public class ScenarioManager : MonoBehaviour
 
     [Header("References")]
     public GameObject agentPrefab;
-    public Transform egoVehicle;
+    public Transform[] egoVehicles;
 
     readonly List<GameObject> m_SpawnedAgents = new();
 
@@ -49,7 +49,7 @@ public class ScenarioManager : MonoBehaviour
         agent.maxSpeed       = config.maxSpeed;
         agent.startleRadius  = config.startleRadius;
         agent.reactionBias   = config.reactionBias;
-        agent.egoVehicle     = egoVehicle;
+        agent.egoVehicles    = egoVehicles;
 
         m_SpawnedAgents.Add(go);
     }

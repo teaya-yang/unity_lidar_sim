@@ -32,7 +32,7 @@ public class ErraticAgent : MonoBehaviour
     [Range(0f, 1f)] public float reversalProbabilityPerSecond = 0.04f;
 
     [Header("Ego Vehicle Reaction")]
-    public Transform egoVehicle;
+    public Transform[] egoVehicles;
     public float startleRadius = 12f;
     [Tooltip("Positive = flee, Negative = approach (curious)")]
     public float reactionBias = 1f;
@@ -101,44 +101,53 @@ public class ErraticAgent : MonoBehaviour
 
     void UpdateReacting()
     {
-        if (egoVehicle == null) { ExitReaction(); return; }
+        Transform closest = ClosestEgoInRange();
+        if (closest == null) { ExitReaction(); return; }
 
-        // compute distance between transform.position (agents) and egoVehicle (ambulance)
-        float dist = Vector3.Distance(transform.position, egoVehicle.position);
-        if (dist >= startleRadius)
-            ExitReaction();
-        else if (!navAgent.pathPending && navAgent.remainingDistance < waypointReachedDistance)
-            SetReactionTarget();
+        if (!navAgent.pathPending && navAgent.remainingDistance < waypointReachedDistance)
+            SetReactionTarget(closest);
     }
 
     // ── Ego vehicle reaction ───────────────────────────────────────────────────
 
     void CheckEgoReaction()
     {
-        if (egoVehicle == null || state == State.Crossing) return;
+        if (state == State.Crossing) return;
 
-        // check distance from ego
-        float dist = Vector3.Distance(transform.position, egoVehicle.position);
-        bool inRange = dist < startleRadius;
+        Transform closest = ClosestEgoInRange();
 
-        if (inRange && state != State.Reacting)  EnterReaction();
-        if (!inRange && state == State.Reacting) ExitReaction();
+        if (closest != null && state != State.Reacting) EnterReaction(closest);
+        if (closest == null && state == State.Reacting) ExitReaction();
     }
 
-    void EnterReaction()
+    void EnterReaction(Transform ego)
     {
         state = State.Reacting;
         navAgent.speed = Random.Range(minSpeed, maxSpeed) * reactionSpeedMultiplier;
-        SetReactionTarget();
+        SetReactionTarget(ego);
     }
 
-    void SetReactionTarget()
+    void SetReactionTarget(Transform ego)
     {
-        if (egoVehicle == null) return;
+        if (ego == null) return;
         // reactionBias > 0 → flee away; < 0 → move toward (curious animal)
-        Vector3 dir = (transform.position - egoVehicle.position).normalized * Mathf.Sign(reactionBias);
+        Vector3 dir = (transform.position - ego.position).normalized * Mathf.Sign(reactionBias);
         Vector3 candidate = transform.position + dir * wanderRadius * 0.5f;
         TrySetDestination(candidate, wanderRadius);
+    }
+
+    Transform ClosestEgoInRange()
+    {
+        Transform best = null;
+        float bestDist = startleRadius;
+        if (egoVehicles == null) return null;
+        foreach (Transform t in egoVehicles)
+        {
+            if (t == null) continue;
+            float d = Vector3.Distance(transform.position, t.position);
+            if (d < bestDist) { bestDist = d; best = t; }
+        }
+        return best;
     }
 
     void ExitReaction()

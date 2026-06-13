@@ -149,7 +149,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioManager
   config: {fileID: 11400000, guid: fd17129906fded5a281929d25b6432ea, type: 2}
-  agentPrefab: {fileID: 0}
+  agentPrefab: {fileID: 466506616}
   egoVehicle: {fileID: 1628374747}
 --- !u!4 &58590174
 Transform:
