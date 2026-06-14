@@ -226,6 +226,7 @@ GameObject:
   m_Component:
   - component: {fileID: 183630341}
   - component: {fileID: 183630340}
+  - component: {fileID: 183630342}
   m_Layer: 0
   m_Name: Ambulance_root (2)
   m_TagString: Untagged
@@ -263,6 +264,29 @@ Transform:
   - {fileID: 1983142837}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 90, z: 0}
+--- !u!114 &183630342
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 183630339}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6680789e3f721232b9c4c229c25a9316, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ErraticVehicle
+  minSpeed: 4
+  maxSpeed: 12
+  rotationSpeed: 3
+  waypointReachedDistance: 2
+  wanderRadius: 60
+  stopProbabilityPerSecond: 0.04
+  minStopDuration: 1
+  maxStopDuration: 5
+  airplane: {fileID: 1628374747}
+  reactionRadius: 30
+  pullOverOnReaction: 1
 --- !u!1 &187434678
 GameObject:
   m_ObjectHideFlags: 0
@@ -437,6 +461,37 @@ CapsuleCollider:
   m_Height: 1
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &490460058
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 490460059}
+  m_Layer: 0
+  m_Name: taxi2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &490460059
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 490460058}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 2.5, y: 0, z: 324}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &653569780
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1192,6 +1247,37 @@ NavMeshAgent:
   m_BaseOffset: 0
   m_WalkableMask: 4294967295
   m_ObstacleAvoidanceType: 4
+--- !u!1 &1212010206
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1212010207}
+  m_Layer: 0
+  m_Name: taxi1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1212010207
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1212010206}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1266859023
 GameObject:
   m_ObjectHideFlags: 0
@@ -1266,6 +1352,62 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1281236753
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1281236755}
+  - component: {fileID: 1281236754}
+  m_Layer: 0
+  m_Name: SpawnManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1281236754
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1281236753}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5555c20bc12e81a909f22aa6da7fe16c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ProximitySpawnZone
+  ego: {fileID: 1628374747}
+  agentPrefabs:
+  - {fileID: 403517184}
+  - {fileID: 1168458169}
+  targetCount: 8
+  spawnRadius: 40
+  cullRadius: 80
+  checkInterval: 3
+  minSpeed: 0.5
+  maxSpeed: 3.5
+  startleRadius: 15
+  reactionBias: 1
+--- !u!4 &1281236755
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1281236753}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 7.79164, y: 0.00002, z: 13.53664}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1628374746
 GameObject:
   m_ObjectHideFlags: 0
@@ -1327,15 +1469,15 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1628374746}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7a6d2cd0976f8a9f08d48ed7a9eef2b9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WaypointPatrol
   waypoints:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 1212010207}
+  - {fileID: 490460059}
+  - {fileID: 2121591464}
   speed: 10
   waypointReachedDistance: 1
   rotationSpeed: 0.5
@@ -1352,10 +1494,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c57536f3f3509fe2d86154016ca008af, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EgoAircraftController
-  policyModel: {fileID: 0}
-  scenarioManager: {fileID: 126737811}
-  obsBuilder: {fileID: 1628374753}
-  maxNeighbours: 8
 --- !u!114 &1628374751
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1368,11 +1506,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3b297f3c1db419ec3a38d95f90659af8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AircraftAgent
-  rotationSpeed: 2
-  AgentId: 
-  Graph:
-    nodes: []
-    edges: []
 --- !u!114 &1628374752
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1385,9 +1518,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d560037c623fb7ca2b8fbc390923ca13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ILDatasetRecorder
-  scenarioManager: {fileID: 126737811}
-  obsBuilder: {fileID: 1628374753}
-  recordInterval: 1
 --- !u!114 &1628374753
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1400,8 +1530,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7b7c7fd05d4a493a81c78106cd2babf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EgoObservationBuilder
-  scenarioManager: {fileID: 126737811}
-  egoTransform: {fileID: 1628374747}
 --- !u!1 &1648720290
 GameObject:
   m_ObjectHideFlags: 0
@@ -2074,6 +2202,37 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   moveAxis: 0
   speed: -3
+--- !u!1 &2121591463
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2121591464}
+  m_Layer: 0
+  m_Name: taxi3
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2121591464
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2121591463}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 275.6, y: 0, z: 143}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -2087,4 +2246,7 @@ SceneRoots:
   - {fileID: 849760106}
   - {fileID: 653569780}
   - {fileID: 315645481}
-  - {fileID: 126737812}
+  - {fileID: 1281236755}
+  - {fileID: 1212010207}
+  - {fileID: 490460059}
+  - {fileID: 2121591464}
