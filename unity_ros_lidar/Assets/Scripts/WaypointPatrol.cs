@@ -5,6 +5,7 @@ public class WaypointPatrol : MonoBehaviour
     public Transform[] waypoints;
     public float speed = 6f;
     public float waypointReachedDistance = 1f;
+    public float rotationSpeed = 2f;
 
     public enum LoopMode { Loop, PingPong, Once }
     public LoopMode loopMode = LoopMode.Loop;
@@ -12,6 +13,18 @@ public class WaypointPatrol : MonoBehaviour
     int m_Index;
     int m_Direction = 1;
     bool m_Done;
+
+    void Start()
+    {
+        if (waypoints == null || waypoints.Length == 0) return;
+        float best = float.MaxValue;
+        for (int i = 0; i < waypoints.Length; i++)
+        {
+            if (waypoints[i] == null) continue;
+            float d = Vector3.Distance(transform.position, waypoints[i].position);
+            if (d < best) { best = d; m_Index = i; }
+        }
+    }
 
     void Update()
     {
@@ -25,7 +38,10 @@ public class WaypointPatrol : MonoBehaviour
 
         Vector3 dir = target.position - transform.position;
         if (dir.sqrMagnitude > 0.001f)
-            transform.rotation = Quaternion.LookRotation(dir);
+        {
+            Quaternion targetRot = Quaternion.LookRotation(dir);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, rotationSpeed * Time.deltaTime);
+        }
 
         if (Vector3.Distance(transform.position, target.position) < waypointReachedDistance)
             Advance();

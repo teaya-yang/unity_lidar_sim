@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: ScenarioConfig
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioConfig
   agentCount: 5
-  agentTypes: 00000000
-  minSpeed: 0.5
-  maxSpeed: 3.5
+  agentTypes: 0000000001000000
+  minSpeed: 2
+  maxSpeed: 4
   spawnRadius: 20
-  spawnCenter: {x: 0, y: 0, z: 0}
+  spawnCenter: {x: 43.5, y: 0, z: 79}
   startleRadius: 12
-  reactionBias: 1
+  reactionBias: 2
   seed: 0

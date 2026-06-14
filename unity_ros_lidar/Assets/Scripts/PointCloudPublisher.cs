@@ -69,6 +69,12 @@ public class PointCloudPublisher : MonoBehaviour
 
         // Debug.Log("Publishing point cloud");
 
+        if (laser_sensor_3d == null)
+        {
+            Debug.LogError("[PointCloudPublisher] laser_sensor_3d is null — Start() failed. Check laser_sensor_link assignment and Console for earlier errors.");
+            enabled = false;
+            return;
+        }
         PointCloud2Msg point_cloud_msg = laser_sensor_3d.getScanMsg();
 
         PoseMsg pose_msg = new PoseMsg
