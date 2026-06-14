@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -8,6 +9,11 @@ using UnityEngine;
 /// </summary>
 public class ErraticVehicle : MonoBehaviour
 {
+    static readonly List<ErraticVehicle> s_All = new();
+
+    void OnEnable()  => s_All.Add(this);
+    void OnDisable() => s_All.Remove(this);
+
     [Header("Patrol Route")]
     [Tooltip("Assign street waypoints for a predictable route. Leave empty for random wandering.")]
     public Transform[] patrolWaypoints;
@@ -24,6 +30,10 @@ public class ErraticVehicle : MonoBehaviour
     [Range(0f, 1f)] public float stopProbabilityPerSecond = 0.04f;
     public float minStopDuration = 1f;
     public float maxStopDuration = 5f;
+
+    [Header("Separation")]
+    public float separationRadius   = 6f;
+    public float separationStrength = 3f;
 
     [Header("Airplane reaction")]
     public Transform airplane;
@@ -80,10 +90,26 @@ public class ErraticVehicle : MonoBehaviour
         transform.rotation = Quaternion.RotateTowards(
             transform.rotation, look, rotationSpeed * 60f * Time.deltaTime);
 
-        // drive along the car's own heading, not straight at the target — turn first, then accelerate
-        Vector3 heading = -transform.forward;            // visual front
+        Vector3 heading = -transform.forward;
         float alignment = Mathf.Clamp01(Vector3.Dot(heading, dir));
-        transform.position += heading * (m_Speed * alignment * Time.deltaTime);
+        Vector3 move = heading * (m_Speed * alignment) + Separation();
+        move.y = 0f;
+        transform.position += move * Time.deltaTime;
+    }
+
+    Vector3 Separation()
+    {
+        Vector3 offset = Vector3.zero;
+        foreach (ErraticVehicle other in s_All)
+        {
+            if (other == this) continue;
+            Vector3 diff = transform.position - other.transform.position;
+            diff.y = 0f;
+            float dist = diff.magnitude;
+            if (dist < separationRadius && dist > 0.001f)
+                offset += diff.normalized * ((separationRadius - dist) / separationRadius);
+        }
+        return offset * separationStrength;
     }
 
     void CheckAirplaneReaction()
