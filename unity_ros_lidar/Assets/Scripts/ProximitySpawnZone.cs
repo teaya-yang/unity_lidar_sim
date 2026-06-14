@@ -19,7 +19,11 @@ public class ProximitySpawnZone : MonoBehaviour
     public int   targetCount      = 8;
     public float minSpawnDistance = 20f;     // don't spawn closer than this (keep outside LiDAR view)
     public float spawnRadius      = 60f;     // spawn within this distance of ego
-    public float cullRadius       = 90f;     // destroy agents beyond this distance
+    public float lidarRange       = 80f;     // match this to PointCloudPublisher.maxRange
+    [Tooltip("How far behind the plane an agent must be before it can be culled. " +
+             "0 = exactly perpendicular, 1 = directly behind. 0.2 is a safe margin.")]
+    [Range(0f, 1f)]
+    public float behindThreshold  = 0.2f;
     public float checkInterval    = 3f;      // seconds between spawn/cull passes
     [Range(10f, 360f)]
     [Tooltip("Total angular width of the spawn arc.")]
@@ -59,12 +63,15 @@ public class ProximitySpawnZone : MonoBehaviour
 
             Vector3 toAgent = m_Agents[i].transform.position - ego.position;
             float dist = toAgent.magnitude;
-            if (dist <= cullRadius) continue;   // within range — always keep
 
-            // beyond cullRadius: only cull if behind or beside the plane, never if in front
+            // keep anything the LiDAR can still reach
+            if (dist <= lidarRange) continue;
+
+            // beyond LiDAR range: only cull if clearly behind the plane,
+            // not just beside it — behindThreshold > 0 adds a margin past 90°
             toAgent.y = 0f;
             float dot = hasFwd ? Vector3.Dot(fwd, toAgent.normalized) : -1f;
-            if (dot <= 0f)
+            if (dot < -behindThreshold)
             {
                 Destroy(m_Agents[i]);
                 m_Agents.RemoveAt(i);
@@ -141,7 +148,7 @@ public class ProximitySpawnZone : MonoBehaviour
         if (ego == null) return;
 
         Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(ego.position, cullRadius);
+        Gizmos.DrawWireSphere(ego.position, lidarRange);
 
         Vector3 fwd = ego.forward;
         fwd.y = 0f;

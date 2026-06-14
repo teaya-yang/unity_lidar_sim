@@ -319,11 +319,32 @@ public class ErraticAgent : MonoBehaviour
 
     public void TriggerCrossing(Vector3 crossPoint)
     {
-        if (state == State.Crossing || state == State.Reacting) return;
-        state = State.Crossing;
+        // Already crossing — don't restart. Reacting is allowed to be overridden:
+        // crossing the street takes priority over startling at the ego vehicle.
+        if (state == State.Crossing) return;
+
+        // A NavMeshAgent only moves if it's actually placed on the navmesh. If the agent
+        // was spawned/dropped off the baked mesh, SetDestination silently does nothing.
+        if (navAgent == null || !navAgent.isOnNavMesh)
+        {
+            Debug.LogWarning($"[ErraticAgent] '{name}' is NOT on the NavMesh — can't cross. " +
+                             "Place agents on baked navmesh (snap them to the ground).", this);
+            return;
+        }
+
         navAgent.isStopped = false;
         navAgent.speed = Random.Range(minSpeed * 0.8f, maxSpeed * 1.3f);
-        TrySetDestination(crossPoint, 5f);
+
+        // search a wide radius so a slightly-off crossTarget still resolves onto the navmesh
+        if (!TrySetDestination(crossPoint, 15f))
+        {
+            Debug.LogWarning($"[ErraticAgent] '{name}' could not reach crossTarget {crossPoint} " +
+                             "— no NavMesh within 15 m. Move the target onto baked navmesh.", this);
+            return;
+        }
+
+        Debug.Log($"[ErraticAgent] '{name}' crossing to {crossPoint}.", this);
+        state = State.Crossing;
     }
 
     void ExitCrossing()
