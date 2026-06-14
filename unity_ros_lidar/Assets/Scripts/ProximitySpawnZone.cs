@@ -16,17 +16,24 @@ public class ProximitySpawnZone : MonoBehaviour
     public GameObject[] agentPrefabs;        // person / animal prefabs with ErraticAgent
 
     [Header("Spawn settings")]
-    public int   targetCount   = 8;
-    public float spawnRadius   = 40f;        // spawn within this distance of ego
-    public float cullRadius    = 80f;        // destroy agents beyond this distance
-    public float checkInterval = 3f;         // seconds between spawn/cull passes
+    public int   targetCount      = 8;
+    public float minSpawnDistance = 20f;     // don't spawn closer than this (keep outside LiDAR view)
+    public float spawnRadius      = 60f;     // spawn within this distance of ego
+    public float cullRadius       = 90f;     // destroy agents beyond this distance
+    public float checkInterval    = 3f;      // seconds between spawn/cull passes
+    [Range(10f, 360f)]
+    [Tooltip("Total angular width of the spawn arc.")]
+    public float spawnArc         = 180f;
+    [Range(0f, 360f)]
+    [Tooltip("Degrees offset from ego.forward. 0 = in front, 180 = directly behind.")]
+    public float spawnArcOffset   = 0f;
 
     [Header("Agent config")]
     public float minSpeed      = 0.5f;
     public float maxSpeed      = 3.5f;
-    public float startleRadius = 15f;
-    [Tooltip("Positive = flee, Negative = curious")]
-    public float reactionBias  = 1f;
+    public float startleRadius = 50f;        // must be >= spawnRadius so agents react on spawn
+    [Tooltip("Positive = flee, Negative = curious/approach")]
+    public float reactionBias  = -1f;
 
     readonly List<GameObject> m_Agents = new();
     float m_NextCheck;
@@ -42,10 +49,22 @@ public class ProximitySpawnZone : MonoBehaviour
     void CullDistant()
     {
         if (ego == null) return;
+        Vector3 fwd = ego.forward; fwd.y = 0f;
+        bool hasFwd = fwd.sqrMagnitude > 0.001f;
+        if (hasFwd) fwd.Normalize();
+
         for (int i = m_Agents.Count - 1; i >= 0; i--)
         {
             if (m_Agents[i] == null) { m_Agents.RemoveAt(i); continue; }
-            if (Vector3.Distance(m_Agents[i].transform.position, ego.position) > cullRadius)
+
+            Vector3 toAgent = m_Agents[i].transform.position - ego.position;
+            float dist = toAgent.magnitude;
+            if (dist <= cullRadius) continue;   // within range — always keep
+
+            // beyond cullRadius: only cull if behind or beside the plane, never if in front
+            toAgent.y = 0f;
+            float dot = hasFwd ? Vector3.Dot(fwd, toAgent.normalized) : -1f;
+            if (dot <= 0f)
             {
                 Destroy(m_Agents[i]);
                 m_Agents.RemoveAt(i);
@@ -63,8 +82,30 @@ public class ProximitySpawnZone : MonoBehaviour
 
     void TrySpawnOne()
     {
-        Vector2 disk = Random.insideUnitCircle * spawnRadius;
-        Vector3 candidate = ego.position + new Vector3(disk.x, 0f, disk.y);
+        Vector3 forward = ego.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+        forward.Normalize();
+
+        // rotate forward by the arc offset to get the spawn zone's centre direction
+        float centerRad = spawnArcOffset * Mathf.Deg2Rad;
+        float cos0 = Mathf.Cos(centerRad), sin0 = Mathf.Sin(centerRad);
+        Vector3 center = new Vector3(
+            forward.x * cos0 - forward.z * sin0,
+            0f,
+            forward.x * sin0 + forward.z * cos0);
+
+        // random angle within the arc around that centre
+        float halfArc = spawnArc * 0.5f * Mathf.Deg2Rad;
+        float angle   = Random.Range(-halfArc, halfArc);
+        float cosA = Mathf.Cos(angle), sinA = Mathf.Sin(angle);
+        Vector3 dir = new Vector3(
+            center.x * cosA - center.z * sinA,
+            0f,
+            center.x * sinA + center.z * cosA);
+
+        float dist    = Random.Range(minSpawnDistance, spawnRadius);
+        Vector3 candidate = ego.position + dir * dist;
 
         if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, spawnRadius, NavMesh.AllAreas))
             return;
@@ -98,9 +139,23 @@ public class ProximitySpawnZone : MonoBehaviour
     void OnDrawGizmosSelected()
     {
         if (ego == null) return;
-        Gizmos.color = Color.green;
-        Gizmos.DrawWireSphere(ego.position, spawnRadius);
+
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(ego.position, cullRadius);
+
+        Vector3 fwd = ego.forward;
+        fwd.y = 0f;
+        if (fwd.sqrMagnitude > 0.001f) fwd.Normalize();
+
+        // draw the two edges of the spawn arc
+        Vector3 left  = Quaternion.Euler(0f, spawnArcOffset - spawnArc * 0.5f, 0f) * fwd;
+        Vector3 right = Quaternion.Euler(0f, spawnArcOffset + spawnArc * 0.5f, 0f) * fwd;
+        Gizmos.color = Color.green;
+        Gizmos.DrawRay(ego.position, left  * spawnRadius);
+        Gizmos.DrawRay(ego.position, right * spawnRadius);
+        // inner (min distance) boundary markers
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawRay(ego.position, left  * minSpawnDistance);
+        Gizmos.DrawRay(ego.position, right * minSpawnDistance);
     }
 }

@@ -12,12 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7ad69a2dd3894242cab36745faffd18c, type: 3}
   m_Name: ScenarioConfig
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioConfig
-  agentCount: 5
-  agentTypes: 0000000001000000
-  minSpeed: 2
-  maxSpeed: 4
-  spawnRadius: 20
-  spawnCenter: {x: 43.5, y: 0, z: 79}
-  startleRadius: 12
-  reactionBias: 2
-  seed: 0
+  agentCount: 8
+  agentTypes: 00000000
+  minSpeed: 0.8
+  maxSpeed: 2.5
+  spawnRadius: 30
+  spawnCenter: {x: 0, y: 0, z: 25}
+  startleRadius: 10
+  reactionBias: 1
+  seed: 1

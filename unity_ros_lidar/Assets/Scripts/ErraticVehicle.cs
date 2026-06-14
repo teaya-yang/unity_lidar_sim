@@ -8,6 +8,11 @@ using UnityEngine;
 /// </summary>
 public class ErraticVehicle : MonoBehaviour
 {
+    [Header("Patrol Route")]
+    [Tooltip("Assign street waypoints for a predictable route. Leave empty for random wandering.")]
+    public Transform[] patrolWaypoints;
+    public bool loopPatrol = true;
+
     [Header("Movement")]
     public float minSpeed               = 4f;
     public float maxSpeed               = 12f;
@@ -31,11 +36,16 @@ public class ErraticVehicle : MonoBehaviour
     float   m_StopTimer;
     bool    m_Stopped;
     bool    m_Reacting;
+    int     m_PatrolIndex;
+    int     m_PatrolDir = 1;
 
     void Start()
     {
         m_Speed = Random.Range(minSpeed, maxSpeed);
-        PickWaypoint();
+        if (patrolWaypoints != null && patrolWaypoints.Length > 0)
+            m_Target = patrolWaypoints[0].position;
+        else
+            PickWaypoint();
     }
 
     void Update()
@@ -52,7 +62,7 @@ public class ErraticVehicle : MonoBehaviour
         MoveTowardTarget();
 
         if (Vector3.Distance(transform.position, m_Target) < waypointReachedDistance)
-            PickWaypoint();
+            AdvanceTarget();
 
         if (!m_Reacting && Roll(stopProbabilityPerSecond))
             EnterStop();
@@ -60,15 +70,20 @@ public class ErraticVehicle : MonoBehaviour
 
     void MoveTowardTarget()
     {
-        transform.position = Vector3.MoveTowards(
-            transform.position, m_Target, m_Speed * Time.deltaTime);
-
         Vector3 dir = m_Target - transform.position;
-        if (dir.sqrMagnitude > 0.001f)
-        {
-            Quaternion look = Quaternion.LookRotation(dir);
-            transform.rotation = Quaternion.Slerp(transform.rotation, look, rotationSpeed * Time.deltaTime);
-        }
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 0.001f) return;
+        dir.Normalize();
+
+        // model's visual front is -Z, so face -dir toward the target
+        Quaternion look = Quaternion.LookRotation(-dir);
+        transform.rotation = Quaternion.RotateTowards(
+            transform.rotation, look, rotationSpeed * 60f * Time.deltaTime);
+
+        // drive along the car's own heading, not straight at the target — turn first, then accelerate
+        Vector3 heading = -transform.forward;            // visual front
+        float alignment = Mathf.Clamp01(Vector3.Dot(heading, dir));
+        transform.position += heading * (m_Speed * alignment * Time.deltaTime);
     }
 
     void CheckAirplaneReaction()
@@ -102,7 +117,30 @@ public class ErraticVehicle : MonoBehaviour
     {
         m_Stopped = false;
         m_Speed   = Random.Range(minSpeed, maxSpeed);
-        PickWaypoint();
+        AdvanceTarget();
+    }
+
+    void AdvanceTarget()
+    {
+        if (patrolWaypoints != null && patrolWaypoints.Length > 0)
+        {
+            if (loopPatrol)
+            {
+                m_PatrolIndex = (m_PatrolIndex + 1) % patrolWaypoints.Length;
+            }
+            else
+            {
+                m_PatrolIndex += m_PatrolDir;
+                if (m_PatrolIndex >= patrolWaypoints.Length - 1 || m_PatrolIndex <= 0)
+                    m_PatrolDir *= -1;
+            }
+            Transform wp = patrolWaypoints[m_PatrolIndex];
+            if (wp != null) m_Target = wp.position;
+        }
+        else
+        {
+            PickWaypoint();
+        }
     }
 
     void PickWaypoint()

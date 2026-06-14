@@ -11,6 +11,12 @@ public class ScenarioManager : MonoBehaviour
     public GameObject agentPrefab;
     public Transform[] egoVehicles;
 
+    [Header("Optional wiring (S2 emergency / patrol scenes)")]
+    [Tooltip("Vehicles whose proximity makes patrolling agents go erratic (e.g. ambulance).")]
+    public Transform[] emergencyVehicles;
+    [Tooltip("Shared street route. If set, spawned agents patrol it instead of pure wandering.")]
+    public Transform[] patrolWaypoints;
+
     readonly List<GameObject> m_SpawnedAgents = new();
 
     void Start() => ResetEpisode(config != null ? config.seed : 0);
@@ -45,11 +51,13 @@ public class ScenarioManager : MonoBehaviour
             ? config.agentTypes[Random.Range(0, config.agentTypes.Length)]
             : ErraticAgent.AgentType.Pedestrian;
 
-        agent.minSpeed       = config.minSpeed;
-        agent.maxSpeed       = config.maxSpeed;
-        agent.startleRadius  = config.startleRadius;
-        agent.reactionBias   = config.reactionBias;
-        agent.egoVehicles    = egoVehicles;
+        agent.minSpeed          = config.minSpeed;
+        agent.maxSpeed          = config.maxSpeed;
+        agent.startleRadius     = config.startleRadius;
+        agent.reactionBias      = config.reactionBias;
+        agent.egoVehicles       = egoVehicles;
+        agent.emergencyVehicles = emergencyVehicles;
+        agent.patrolWaypoints   = patrolWaypoints;
 
         m_SpawnedAgents.Add(go);
     }
