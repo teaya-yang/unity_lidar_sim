@@ -48,6 +48,8 @@ public class ErraticVehicle : MonoBehaviour
     bool    m_Reacting;
     int     m_PatrolIndex;
     int     m_PatrolDir = 1;
+    Vector3 m_LastPos;
+    bool    m_HasLastPos;
 
     void Start()
     {
@@ -69,10 +71,23 @@ public class ErraticVehicle : MonoBehaviour
             return;
         }
 
+        // TEMP: if we got moved since our last frame by more than we could have stepped,
+        // another component (or a respawn) is also writing this transform.
+        if (m_HasLastPos)
+        {
+            float jump = Vector3.Distance(transform.position, m_LastPos);
+            if (jump > maxSpeed * Time.deltaTime + 1f)
+                Debug.LogWarning($"[ErraticVehicle] '{name}' moved {jump:F1} m between frames " +
+                                 "— another component is also moving this object (or it respawned).", this);
+        }
+
         MoveTowardTarget();
 
         if (Vector3.Distance(transform.position, m_Target) < waypointReachedDistance)
             AdvanceTarget();
+
+        m_LastPos = transform.position;
+        m_HasLastPos = true;
 
         if (!m_Reacting && Roll(stopProbabilityPerSecond))
             EnterStop();
