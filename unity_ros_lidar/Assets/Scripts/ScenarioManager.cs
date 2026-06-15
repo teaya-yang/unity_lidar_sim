@@ -35,14 +35,26 @@ public class ScenarioManager : MonoBehaviour
 
         SpawnAmbulances();
 
-        if (config == null) { Debug.LogWarning("[ScenarioManager] No ScenarioConfig assigned.", this); return; }
-        if (agentPrefab == null) { Debug.LogWarning("[ScenarioManager] No agentPrefab assigned.", this); return; }
+        if (config == null) { Debug.LogError("[ScenarioManager] No ScenarioConfig assigned.", this); return; }
+        if (agentPrefab == null) {  Debug.LogError("[ScenarioManager] No agentPrefab assigned.", this); return; }
 
+        Debug.Log($"[ScenarioManager] ResetEpisode seed={seed} | config={config.name} | " +
+                  $"agentCount={config.agentCount} spawnCenter={config.spawnCenter} spawnRadius={config.spawnRadius}", this);
+
+        // Warn early if the spawn center is far from any NavMesh
+        if (!NavMesh.SamplePosition(config.spawnCenter, out _, config.spawnRadius * 2f, NavMesh.AllAreas))
+            Debug.LogWarning($"[ScenarioManager] spawnCenter {config.spawnCenter} has NO NavMesh within " +
+                             $"{config.spawnRadius * 2f} m. Bake a NavMesh that covers this area, " +
+                             "or move spawnCenter onto the baked surface.", this);
+
+        int spawned = 0;
         for (int i = 0; i < config.agentCount; i++)
-            SpawnAgent(i);
+            if (SpawnAgent(i)) spawned++;
+
+        Debug.Log($"[ScenarioManager] Spawned {spawned}/{config.agentCount} agents.", this);
     }
 
-    void SpawnAgent(int index)
+    bool SpawnAgent(int index)
     {
         Vector3 candidate = config.spawnCenter +
             new Vector3(Random.Range(-config.spawnRadius, config.spawnRadius), 0f,
@@ -50,16 +62,24 @@ public class ScenarioManager : MonoBehaviour
 
         if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, config.spawnRadius, NavMesh.AllAreas))
         {
-            Debug.LogWarning($"[ScenarioManager] No NavMesh found near {config.spawnCenter} " +
-                             $"(radius {config.spawnRadius}). Bake a NavMesh or move spawnCenter.", this);
-            return;
+            Debug.LogWarning($"[ScenarioManager] Agent_{index}: NavMesh sample FAILED " +
+                             $"at candidate {candidate} (searchRadius={config.spawnRadius}). " +
+                             "Move spawnCenter onto baked NavMesh, increase spawnRadius, or re-bake.", this);
+            return false;
         }
+
+        Debug.Log($"[ScenarioManager] Agent_{index}: candidate={candidate} → snapped to {hit.position}", this);
 
         GameObject go = Instantiate(agentPrefab, hit.position, Quaternion.identity);
         go.name = $"Agent_{index}";
 
         ErraticAgent agent = go.GetComponent<ErraticAgent>();
-        if (agent == null) return;
+        if (agent == null)
+        {
+            Debug.LogError($"[ScenarioManager] agentPrefab '{agentPrefab.name}' has no ErraticAgent component. " +
+                           "Add ErraticAgent to the prefab.", this);
+            return false;
+        }
 
         agent.agentType = config.agentTypes.Length > 0
             ? config.agentTypes[Random.Range(0, config.agentTypes.Length)]
@@ -74,6 +94,7 @@ public class ScenarioManager : MonoBehaviour
         agent.patrolWaypoints   = patrolWaypoints;
 
         m_SpawnedAgents.Add(go);
+        return true;
     }
 
     void SpawnAmbulances()

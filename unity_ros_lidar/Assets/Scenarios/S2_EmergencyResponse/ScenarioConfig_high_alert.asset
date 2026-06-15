@@ -10,14 +10,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7ad69a2dd3894242cab36745faffd18c, type: 3}
-  m_Name: ScenarioConfig_Sparse
+  m_Name: ScenarioConfig_high_alert
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioConfig
-  agentCount: 5
+  agentCount: 8
   agentTypes: 00000000
-  minSpeed: 0.5
-  maxSpeed: 3.5
-  spawnRadius: 20
-  spawnCenter: {x: 0, y: 0, z: 30}
-  startleRadius: 12
-  reactionBias: 1
-  seed: 0
+  minSpeed: 0.8
+  maxSpeed: 2.5
+  spawnRadius: 30
+  spawnCenter: {x: 0, y: 0, z: 25}
+  startleRadius: 20
+  reactionBias: 3
+  seed: 1

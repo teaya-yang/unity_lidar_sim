@@ -148,8 +148,10 @@ public class ErraticAgent : MonoBehaviour
         foreach (Transform t in emergencyVehicles)
         {
             if (t == null) continue;
-            if (Vector3.Distance(transform.position, t.position) < emergencyRadius)
+            float dist = Vector3.Distance(transform.position, t.position);
+            if (dist < emergencyRadius)
             {
+                Debug.Log($"[ErraticAgent] '{name}' PANIC — '{t.name}' is {dist:F1} m away (radius={emergencyRadius}). {state} → Wandering", this);
                 EnterErratic();
                 return;
             }

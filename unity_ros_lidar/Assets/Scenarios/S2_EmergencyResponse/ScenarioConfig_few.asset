@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7ad69a2dd3894242cab36745faffd18c, type: 3}
-  m_Name: ScenarioConfig
+  m_Name: ScenarioConfig_few
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioConfig
-  agentCount: 8
+  agentCount: 4
   agentTypes: 00000000
   minSpeed: 0.8
   maxSpeed: 2.5
