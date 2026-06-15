@@ -33,7 +33,7 @@ public class AmbulanceTrajectorySubscriber : MonoBehaviour
         }
 
         // convert position from FLU coordinate system use in ROS
-        // ex: (x=3, y=0, z=0) FLU -> (x=0,y=0,z=3)
+        // ex: (x=3, y=0, z=0) FLU -> (x=0,y=0,z=3) 
         Vector3 offset = msg.pose.position.From<FLU>();
         // rigid transformation
         Vector3 newPos = m_InitialPosition + m_InitialRotation * offset;

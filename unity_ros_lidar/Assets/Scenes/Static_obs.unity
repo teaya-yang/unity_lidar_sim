@@ -1065,6 +1065,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1281236755}
   - component: {fileID: 1281236756}
+  - component: {fileID: 1281236757}
   m_Layer: 0
   m_Name: SpawnManager
   m_TagString: Untagged
@@ -1107,6 +1108,22 @@ MonoBehaviour:
   patrolWaypoints: []
   ambulancePrefab: {fileID: 0}
   ambulanceCount: 0
+  randomizers:
+  - {fileID: 1281236757}
+--- !u!114 &1281236757
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1281236753}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f5cac63116cc2a6aacd59fb4192196e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AgentPlacementRandomizer
+  enabledInSweep: 1
+  manager: {fileID: 1281236756}
 --- !u!1 &1310844328
 GameObject:
   m_ObjectHideFlags: 0
@@ -1142,7 +1159,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 64fc9cac3300eaaf69f71a8b3fb60520, type: 2}
   - {fileID: 11400000, guid: a80759f464efc092195d58793bc5010c, type: 2}
   seedCount: 10
-  episodeDuration: 30
+  episodeDuration: 3
   settleTime: 2
 --- !u!4 &1310844330
 Transform:
