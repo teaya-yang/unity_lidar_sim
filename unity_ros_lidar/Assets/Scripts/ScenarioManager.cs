@@ -11,18 +11,6 @@ public class ScenarioManager : MonoBehaviour
     public GameObject agentPrefab;
     public Transform[] egoVehicles;
 
-    [Header("Optional wiring (S2 emergency / patrol scenes)")]
-    [Tooltip("Vehicles whose proximity makes patrolling agents go erratic (e.g. ambulance).")]
-    public Transform[] emergencyVehicles;
-    [Tooltip("Shared street route. If set, spawned agents patrol it instead of pure wandering.")]
-    public Transform[] patrolWaypoints;
-
-    [Header("Ambulance spawning (S2)")]
-    [Tooltip("Ambulance prefab to spawn at runtime. Leave null to use scene-placed emergencyVehicles only.")]
-    public GameObject ambulancePrefab;
-    [Tooltip("How many ambulances to spawn. They share patrolWaypoints, staggered by equal offsets.")]
-    public int ambulanceCount = 0;
-
     [Header("Randomizer pipeline (optional)")]
     [Tooltip("Ordered domain-randomization steps run at the start of each episode " +
              "(Perception-style). Leave empty to use built-in inline placement. Order defines " +
@@ -30,7 +18,6 @@ public class ScenarioManager : MonoBehaviour
     public EpisodeRandomizer[] randomizers;
 
     readonly List<GameObject> m_SpawnedAgents = new();
-    readonly List<Transform>  m_SpawnedAmbulances = new();
 
     // Live agents for the current episode — randomizers (heading, scale, …) act on these.
     public IReadOnlyList<GameObject> SpawnedAgents => m_SpawnedAgents;
@@ -41,8 +28,6 @@ public class ScenarioManager : MonoBehaviour
     {
         DestroyAgents();
         Random.InitState(seed);
-
-        SpawnAmbulances();   // scene-level emergency vehicles (S2); no-op unless ambulanceCount > 0
 
         if (config == null) { Debug.LogError("[ScenarioManager] No ScenarioConfig assigned.", this); return; }
         if (agentPrefab == null) { Debug.LogError("[ScenarioManager] No agentPrefab assigned.", this); return; }
@@ -126,49 +111,10 @@ public class ScenarioManager : MonoBehaviour
         agent.maxSpeed          = config.maxSpeed;
         agent.startleRadius     = config.startleRadius;
         agent.reactionBias      = config.reactionBias;
-        agent.egoVehicles       = egoVehicles;
-        agent.emergencyVehicles = emergencyVehicles;
-        agent.patrolWaypoints   = patrolWaypoints;
+        agent.egoVehicles = egoVehicles;
 
         m_SpawnedAgents.Add(go);
         return true;
-    }
-
-    void SpawnAmbulances()
-    {
-        foreach (Transform t in m_SpawnedAmbulances)
-            if (t != null) Destroy(t.gameObject);
-        m_SpawnedAmbulances.Clear();
-
-        if (ambulancePrefab == null || ambulanceCount <= 0) return;
-
-        // Build combined list: scene-placed + runtime-spawned
-        var allEmergency = new List<Transform>(emergencyVehicles ?? System.Array.Empty<Transform>());
-
-        int wpCount = patrolWaypoints != null ? patrolWaypoints.Length : 0;
-        for (int i = 0; i < ambulanceCount; i++)
-        {
-            // Start each ambulance at a different waypoint offset so they spread out
-            Vector3 spawnPos = wpCount > 0
-                ? patrolWaypoints[(i * (wpCount / Mathf.Max(ambulanceCount, 1))) % wpCount].position
-                : config.spawnCenter + new Vector3(i * 5f, 0f, 0f);
-
-            GameObject go = Instantiate(ambulancePrefab, spawnPos, Quaternion.identity);
-            go.name = $"Ambulance_{i}";
-
-            ErraticVehicle ev = go.GetComponent<ErraticVehicle>();
-            if (ev != null)
-            {
-                ev.patrolWaypoints = patrolWaypoints;
-                ev.airplane = egoVehicles != null && egoVehicles.Length > 0 ? egoVehicles[0] : null;
-            }
-
-            m_SpawnedAmbulances.Add(go.transform);
-            allEmergency.Add(go.transform);
-        }
-
-        // Rebuild the array so spawned agents react to runtime ambulances too
-        emergencyVehicles = allEmergency.ToArray();
     }
 
     void DestroyAgents()
