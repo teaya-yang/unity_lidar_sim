@@ -58,6 +58,8 @@ public class StreetCrossingZone : MonoBehaviour
             m_Seen.Add(agent);
 
             if (Random.value > crossProbability) continue;
+
+            Debug.Log($"{agent} is goint to the target position");
             agent.TriggerCrossing(crossTarget.position);
         }
 

@@ -1387,7 +1387,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StreetCrossingZone
   crossTarget: {fileID: 1541931810}
-  crossProbability: 0.665
+  crossProbability: 1
   scanInterval: 0.5
   heightTolerance: 2
 --- !u!65 &819428310
