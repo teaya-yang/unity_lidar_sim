@@ -8,7 +8,8 @@ public class ScenarioManager : MonoBehaviour
     public ScenarioConfig config;
 
     [Header("References")]
-    public GameObject agentPrefab;
+    [Tooltip("One or more agent prefabs — each spawn picks one at random.")]
+    public GameObject[] agentPrefabs;
     public Transform[] egoVehicles;
 
     [Header("Randomizer pipeline (optional)")]
@@ -30,7 +31,7 @@ public class ScenarioManager : MonoBehaviour
         Random.InitState(seed);
 
         if (config == null) { Debug.LogError("[ScenarioManager] No ScenarioConfig assigned.", this); return; }
-        if (agentPrefab == null) { Debug.LogError("[ScenarioManager] No agentPrefab assigned.", this); return; }
+        if (agentPrefabs == null || agentPrefabs.Length == 0) { Debug.LogError("[ScenarioManager] No agentPrefabs assigned.", this); return; }
 
         Debug.Log($"[ScenarioManager] ResetEpisode seed={seed} | config={config.name} | " +
                   $"agentCount={config.agentCount} spawnCenter={config.spawnCenter} spawnRadius={config.spawnRadius}", this);
@@ -92,13 +93,14 @@ public class ScenarioManager : MonoBehaviour
 
         Debug.Log($"[ScenarioManager] Agent_{index}: candidate={candidate} → snapped to {hit.position}", this);
 
-        GameObject go = Instantiate(agentPrefab, hit.position, Quaternion.identity);
+        GameObject prefab = agentPrefabs[Random.Range(0, agentPrefabs.Length)];
+        GameObject go = Instantiate(prefab, hit.position, Quaternion.identity);
         go.name = $"Agent_{index}";
 
         ErraticAgent agent = go.GetComponent<ErraticAgent>();
         if (agent == null)
         {
-            Debug.LogError($"[ScenarioManager] agentPrefab '{agentPrefab.name}' has no ErraticAgent component. " +
+            Debug.LogError($"[ScenarioManager] agentPrefab '{prefab.name}' has no ErraticAgent component. " +
                            "Add ErraticAgent to the prefab.", this);
             return false;
         }
