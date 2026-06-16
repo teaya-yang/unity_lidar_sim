@@ -15,10 +15,14 @@ public class GroundTruthPublisher : MonoBehaviour
     public string currentConfig;
     public int currentSeed;
 
+    int m_Frame;
+
     ROSConnection m_Ros;
     double m_LastPublishTime;
     double PublishPeriod => 1.0 / publishRateHz;
     bool ShouldPublish => Time.timeAsDouble >= m_LastPublishTime + PublishPeriod;
+
+    public void ResetFrame() => m_Frame = 0;
 
     void Start()
     {
@@ -40,6 +44,7 @@ public class GroundTruthPublisher : MonoBehaviour
         sb.Append($"\"stamp_sec\":{stamp.Seconds},");
         sb.Append($"\"stamp_nsec\":{stamp.NanoSeconds},");
         sb.Append($"\"episode\":{currentEpisode},");
+        sb.Append($"\"frame\":{m_Frame++},");
         sb.Append($"\"config\":\"{currentConfig}\",");
         sb.Append($"\"seed\":{currentSeed},");
 
