@@ -54,6 +54,82 @@ For ROS:
   * Back to the "Display" panel, change the point cloud size to 0.05 m.
 
 
+## Data collection pipeline
+
+The full pipeline records synchronized LiDAR point clouds and ground-truth agent labels across automatically generated episodes.
+
+### Components
+
+| Component | Role |
+|---|---|
+| `ScenarioConfig` assets | Define agent count, speed, spawn area per scenario |
+| `EpisodeSweepRunner` | Cycles through (config, seed) pairs automatically |
+| `AgentPlacementRandomizer` | Spawns agents at randomized NavMesh positions |
+| `PatrolPathRandomizer` | Assigns a unique random patrol route to each agent |
+| `GroundTruthPublisher` | Publishes agent positions + states to `/ground_truth/agents` |
+| `ros2 bag record` | Records all topics to disk |
+
+### Step-by-step
+
+**Terminal 1 — ROS endpoint**
+```bash
+cd ws_Unity
+source install/local_setup.bash
+ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=127.0.0.1
+```
+
+**Terminal 2 — start recording before pressing Play**
+```bash
+ros2 bag record /point_cloud/PointCloud2 /ground_truth/agents -o sweep_s1_$(date +%s)
+```
+
+**Unity — press Play**
+
+The `EpisodeSweepRunner` takes over:
+1. Sets the active `ScenarioConfig` on `ScenarioManager`
+2. Runs all randomizers (placement → patrol paths → any others)
+3. Waits `settleTime` seconds for agents to start moving
+4. Records for `episodeDuration` seconds
+5. Advances to next (config, seed) pair and repeats
+
+The Console prints a line on every episode transition:
+```
+[SWEEP] episode 3/30 | config=S1_Dense | seed=2 | agents=30 spawnRadius=40
+```
+Use these timestamps to slice the bag into labelled episodes in post-processing.
+
+**Terminal 2 — stop recording when sweep finishes**
+```
+Ctrl+C
+```
+
+### Output
+
+```
+sweep_s1_<timestamp>/
+  metadata.yaml
+  sweep_s1_<timestamp>_0.db3    ← point clouds + ground truth, all episodes
+
+~/.config/unity3d/.../sweep_log.json  ← episode index: config, seed, agent count, Unix timestamp
+```
+
+The `.db3` bag and `sweep_log.json` together give you fully labelled, reproducible episodes. Pair frames by matching the `stamp_sec/stamp_nsec` fields in the `/ground_truth/agents` JSON to the `PointCloud2` header timestamp — both use `Clock.time` as their source.
+
+### Replaying and inspecting
+
+```bash
+# list topics and message counts
+ros2 bag info sweep_s1_<timestamp>/
+
+# replay at half speed for inspection in rviz2
+ros2 bag play sweep_s1_<timestamp>/ --rate 0.5
+
+# print ground truth messages
+ros2 topic echo /ground_truth/agents
+```
+
+---
+
 ## External dynamics 
 * A python code @scripts/trajectory_publisher.py is generating the trajectory of the ambulance and publishing it as a ROS2 topic `/ambulance/trajectory`.
 * @unity_ros_lidar/Assets/Scripts/AmbulanceTrajectorySubscriber.cs listens to the topic and move the ambulance in unity. In unity editor, click the `Ambulance_no_damage` object and make sure the `AmbulanceTrajectorySubscriber` script is attached and enabled. 

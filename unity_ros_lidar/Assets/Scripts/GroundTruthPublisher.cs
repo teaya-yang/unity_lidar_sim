@@ -53,7 +53,7 @@ public class GroundTruthPublisher : MonoBehaviour
     {
         if (!ShouldPublish) return;
 
-        TimeStamp stamp = Clock.Now;
+        TimeStamp stamp = new TimeStamp(Clock.time);
         ErraticAgent[] agents = Object.FindObjectsByType<ErraticAgent>(FindObjectsSortMode.None);
 
         var sb = new StringBuilder(512);
