@@ -11,6 +11,7 @@ public class EpisodeSweepRunner : MonoBehaviour
 {
     [Header("References")]
     public ScenarioManager scenarioManager;
+    public GroundTruthPublisher groundTruthPublisher;
 
     [Header("Configs to sweep (drag assets here in order)")]
     public ScenarioConfig[] configs;
@@ -76,6 +77,13 @@ public class EpisodeSweepRunner : MonoBehaviour
 
         int total = configs.Length * seedCount;
         int current = m_ConfigIndex * seedCount + m_SeedIndex + 1;
+
+        if (groundTruthPublisher != null)
+        {
+            groundTruthPublisher.currentEpisode = current;
+            groundTruthPublisher.currentConfig  = cfg.name;
+            groundTruthPublisher.currentSeed    = seed;
+        }
         Debug.Log($"[SWEEP] episode {current}/{total} | config={cfg.name} | seed={seed} | " +
                   $"agents={cfg.agentCount} spawnRadius={cfg.spawnRadius}");
 
