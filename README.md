@@ -80,7 +80,10 @@ ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=127.0.0.
 
 **Terminal 2 — start recording before pressing Play**
 ```bash
-ros2 bag record /point_cloud/PointCloud2 /ground_truth/agents -o sweep_s1_$(date +%s)
+# Bags are saved under Unity_Lidar_Sim/bags/ — create it once if it doesn't exist
+mkdir -p ~/Unity_Lidar_Sim/bags
+ros2 bag record /point_cloud /ground_truth/agents \
+  -o ~/Unity_Lidar_Sim/bags/sweep_s1_$(date +%s)
 ```
 
 **Unity — press Play**
@@ -106,25 +109,90 @@ Ctrl+C
 ### Output
 
 ```
-sweep_s1_<timestamp>/
-  metadata.yaml
-  sweep_s1_<timestamp>_0.db3    ← point clouds + ground truth, all episodes
+~/Unity_Lidar_Sim/bags/
+  sweep_s1_<timestamp>/
+    metadata.yaml
+    sweep_s1_<timestamp>_0.db3    ← point clouds + ground truth, all episodes
 
-~/.config/unity3d/.../sweep_log.json  ← episode index: config, seed, agent count, Unix timestamp
+~/.config/unity3d/DefaultCompany/unity_ros_lidar_3d/sweep_log.json  ← episode index: config, seed, agent count, Unix timestamp
 ```
 
 The `.db3` bag and `sweep_log.json` together give you fully labelled, reproducible episodes. Pair frames by matching the `stamp_sec/stamp_nsec` fields in the `/ground_truth/agents` JSON to the `PointCloud2` header timestamp — both use `Clock.time` as their source.
+
+### Dataset contents
+
+Every recorded frame contains two synchronized messages:
+
+**`/point_cloud` — `sensor_msgs/PointCloud2`**
+
+Raw LiDAR point cloud from the raycast sensor. Each point is 16 bytes:
+
+| Field | Type | Description |
+|---|---|---|
+| `x, y, z` | float32 | Point position in sensor frame (metres) |
+| `intensity` | float32 | Simulated return intensity |
+
+Typical frame: ~10 000–50 000 points depending on FOV and angular resolution settings.
+
+**`/ground_truth/agents` — `std_msgs/String` (JSON)**
+
+One JSON object per frame with full scene state:
+
+```json
+{
+  "stamp_sec": 42, "stamp_nsec": 100000000,
+  "episode": 3, "config": "ScenarioConfig_Dense", "seed": 2,
+  "agents": [
+    {
+      "id": 0,
+      "type": "Pedestrian",
+      "state": "Patrolling",
+      "rx": 5.231, "ry": -2.100, "rz": 0.0,
+      "yaw": 1.047,
+      "bbox": { "cx": 5.231, "cy": -2.100, "cz": 0.9,
+                "sx": 0.6,   "sy": 0.6,   "sz": 1.8 }
+    }
+  ],
+  "vehicles": [
+    {
+      "id": 0,
+      "type": "Vehicle",
+      "state": "Moving",
+      "rx": 12.0, "ry": -4.5, "rz": 0.0,
+      "yaw": 0.52,
+      "bbox": { "cx": 12.0, "cy": -4.5, "cz": 1.1,
+                "sx": 4.5,  "sy": 2.0,  "sz": 2.2 }
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `stamp_sec/nsec` | ROS sim-time timestamp — matches the PointCloud2 header for frame pairing |
+| `episode/config/seed` | Which sweep episode this frame belongs to |
+| `type` | `Pedestrian`, `Animal`, or `Vehicle` |
+| `state` | `Patrolling`, `Wandering`, `Reacting`, or `Paused` |
+| `rx/ry/rz` | World position in ROS frame (x=forward, y=left, z=up) |
+| `yaw` | Heading in radians, ROS convention |
+| `bbox.cx/cy/cz` | Bounding box **center** in ROS frame (not pivot point) |
+| `bbox.sx/sy/sz` | Bounding box **full extents** in metres |
+
+**`sweep_log.json`** — written at `~/.config/unity3d/DefaultCompany/unity_ros_lidar_3d/sweep_log.json` at the end of the sweep. Maps each episode number to its config name, seed, agent count, and Unix timestamp — use this to slice the bag by episode in post-processing.
 
 ### Replaying and inspecting
 
 ```bash
 # list topics and message counts
-ros2 bag info sweep_s1_<timestamp>/
+ros2 bag info ~/Unity_Lidar_Sim/bags/sweep_s1_<timestamp>/
+
+# verify both topics are present — should show /point_cloud and /ground_truth/agents
+ros2 bag info ~/Unity_Lidar_Sim/bags/sweep_s1_<timestamp>/ | grep Topic
 
 # replay at half speed for inspection in rviz2
-ros2 bag play sweep_s1_<timestamp>/ --rate 0.5
+ros2 bag play ~/Unity_Lidar_Sim/bags/sweep_s1_<timestamp>/ --rate 0.5
 
-# print ground truth messages
+# print ground truth messages (while bag is playing)
 ros2 topic echo /ground_truth/agents
 ```
 

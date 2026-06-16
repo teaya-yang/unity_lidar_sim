@@ -4,28 +4,6 @@ using Unity.Robotics.ROSTCPConnector;
 using Unity.Robotics.Core;
 using RosMessageTypes.Std;
 
-// Publishes per-frame ground-truth agent states as a JSON-encoded StringMsg.
-// Attach to the same "ROS Publishers" GameObject as PointCloudPublisher.
-// Must run at the same rate as PointCloudPublisher so timestamps correlate.
-//
-// Topic: /ground_truth/agents  (std_msgs/String, JSON payload)
-//
-// JSON schema per message:
-// {
-//   "stamp_sec":  int,
-//   "stamp_nsec": int,
-//   "episode":    int,
-//   "config":     string,
-//   "seed":       int,
-//   "agents": [
-//     { "id": int, "type": string, "state": string,
-//       "rx": float, "ry": float, "rz": float,   // ROS frame (x=fwd, y=left, z=up)
-//       "yaw": float }                            // radians, ROS convention
-//   ]
-// }
-//
-// Coordinate convention (from CLAUDE.md):
-//   ROS x = Unity z,  ROS y = -Unity x,  ROS z = Unity y
 public class GroundTruthPublisher : MonoBehaviour
 {
     [Header("ROS")]
@@ -54,57 +32,101 @@ public class GroundTruthPublisher : MonoBehaviour
         if (!ShouldPublish) return;
 
         TimeStamp stamp = new TimeStamp(Clock.time);
-        ErraticAgent[] agents = Object.FindObjectsByType<ErraticAgent>(FindObjectsSortMode.None);
+        ErraticAgent[]  agents   = Object.FindObjectsByType<ErraticAgent>(FindObjectsSortMode.None);
+        ErraticVehicle[] vehicles = Object.FindObjectsByType<ErraticVehicle>(FindObjectsSortMode.None);
 
-        var sb = new StringBuilder(512);
+        var sb = new StringBuilder(1024);
         sb.Append("{");
         sb.Append($"\"stamp_sec\":{stamp.Seconds},");
         sb.Append($"\"stamp_nsec\":{stamp.NanoSeconds},");
         sb.Append($"\"episode\":{currentEpisode},");
         sb.Append($"\"config\":\"{currentConfig}\",");
         sb.Append($"\"seed\":{currentSeed},");
-        sb.Append("\"agents\":[");
 
+        sb.Append("\"agents\":[");
         for (int i = 0; i < agents.Length; i++)
         {
             ErraticAgent a = agents[i];
-            Vector3 up = a.transform.position;
-
-            // Unity → ROS axis swap
-            float rx = up.z;
-            float ry = -up.x;
-            float rz = up.y;
-
-            // Yaw: Unity rotates around Y, ROS around Z. Negate for handedness.
-            float yaw = -a.transform.eulerAngles.y * Mathf.Deg2Rad;
-
             if (i > 0) sb.Append(",");
-            sb.Append("{");
-            sb.Append($"\"id\":{i},");
-            sb.Append($"\"type\":\"{a.agentType}\",");
-            sb.Append($"\"state\":\"{GetState(a)}\",");
-            sb.Append($"\"rx\":{rx:F3},\"ry\":{ry:F3},\"rz\":{rz:F3},");
-            sb.Append($"\"yaw\":{yaw:F4}");
+            AppendPose(sb, i, a.agentType.ToString(), GetState(a), a.transform);
+            AppendBbox(sb, a.gameObject);
             sb.Append("}");
         }
+        sb.Append("],");
 
+        sb.Append("\"vehicles\":[");
+        for (int i = 0; i < vehicles.Length; i++)
+        {
+            ErraticVehicle v = vehicles[i];
+            if (i > 0) sb.Append(",");
+            AppendPose(sb, i, "Vehicle", "Moving", v.transform);
+            AppendBbox(sb, v.gameObject);
+            sb.Append("}");
+        }
         sb.Append("]}");
 
         m_Ros.Publish(topic, new StringMsg(sb.ToString()));
         m_LastPublishTime = Time.timeAsDouble;
     }
 
-    // Reflect the private State enum out via the agent's public behaviour.
-    // ErraticAgent doesn't expose State publicly, so we infer it from NavMeshAgent.
+    // Writes opening of a JSON object with pose fields (no closing brace — bbox is appended next).
+    static void AppendPose(StringBuilder sb, int id, string type, string state, Transform t)
+    {
+        float rx =  t.position.z;
+        float ry = -t.position.x;
+        float rz =  t.position.y;
+        float yaw = -t.eulerAngles.y * Mathf.Deg2Rad;
+
+        sb.Append("{");
+        sb.Append($"\"id\":{id},");
+        sb.Append($"\"type\":\"{type}\",");
+        sb.Append($"\"state\":\"{state}\",");
+        sb.Append($"\"rx\":{rx:F3},\"ry\":{ry:F3},\"rz\":{rz:F3},");
+        sb.Append($"\"yaw\":{yaw:F4},");
+    }
+
+    // Appends "bbox":{...} from the world-space AABB of all Renderers on the GameObject.
+    static void AppendBbox(StringBuilder sb, GameObject go)
+    {
+        Bounds b = GetCombinedBounds(go);
+
+        // Center: Unity → ROS axis swap
+        float cx =  b.center.z;
+        float cy = -b.center.x;
+        float cz =  b.center.y;
+
+        // Size: axes swap the same way (extents are always positive)
+        float sx = b.size.z;
+        float sy = b.size.x;
+        float sz = b.size.y;
+
+        sb.Append($"\"bbox\":{{\"cx\":{cx:F3},\"cy\":{cy:F3},\"cz\":{cz:F3},");
+        sb.Append($"\"sx\":{sx:F3},\"sy\":{sy:F3},\"sz\":{sz:F3}}}");
+    }
+
+    // Returns world-space AABB enclosing all Renderers on the GameObject and its children.
+    // Falls back to a unit cube at the object's position if no renderers are found.
+    static Bounds GetCombinedBounds(GameObject go)
+    {
+        Renderer[] renderers = go.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0)
+            return new Bounds(go.transform.position, Vector3.one);
+
+        Bounds b = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++)
+            b.Encapsulate(renderers[i].bounds);
+        return b;
+    }
+
     static string GetState(ErraticAgent a)
     {
         var nav = a.GetComponent<UnityEngine.AI.NavMeshAgent>();
         if (nav == null) return "Unknown";
-        if (nav.isStopped)                          return "Paused";
-        if (nav.speed > a.maxSpeed * 1.4f)          return "Reacting";
+        if (nav.isStopped)                        return "Paused";
+        if (nav.speed > a.maxSpeed * 1.4f)        return "Reacting";
         if (a.patrolWaypoints != null
             && a.patrolWaypoints.Length > 0
-            && nav.remainingDistance > 0.5f)        return "Patrolling";
+            && nav.remainingDistance > 0.5f)      return "Patrolling";
         return "Wandering";
     }
 }
