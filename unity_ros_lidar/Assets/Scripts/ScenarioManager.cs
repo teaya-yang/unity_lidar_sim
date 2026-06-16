@@ -109,8 +109,8 @@ public class ScenarioManager : MonoBehaviour
         ErraticAgent agent = go.GetComponent<ErraticAgent>();
         if (agent != null)
         {
-            agent.minSpeed      = config.minSpeed;
-            agent.maxSpeed      = config.maxSpeed;
+            // Speed is kept from the prefab so each type can move at its own pace.
+            // Only scenario-wide reaction settings are applied.
             agent.startleRadius = config.startleRadius;
             agent.reactionBias  = config.reactionBias;
             agent.egoVehicles   = egoVehicles;

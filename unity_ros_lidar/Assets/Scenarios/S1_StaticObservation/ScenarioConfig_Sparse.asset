@@ -14,13 +14,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioConfig
   spawnEntries:
   - label: Pedestrian
-    prefabs: []
+    prefabs:
+    - {fileID: 7897420823872174766, guid: 96d98df100c25db4598807162b10c097, type: 3}
     minCount: 5
     maxCount: 5
     spawnWeight: 1
   totalAgentBudget: 0
-  minSpeed: 0.5
-  maxSpeed: 3.5
   spawnRadius: 20
   spawnCenter: {x: 0, y: 0, z: 30}
   startleRadius: 12

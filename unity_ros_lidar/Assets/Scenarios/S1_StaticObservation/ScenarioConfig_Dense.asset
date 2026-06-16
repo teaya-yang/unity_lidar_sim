@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioConfig
   spawnEntries:
   - label: Pedestrian
-    prefabs: []
+    prefabs:
+    - {fileID: 7897420823872174766, guid: 96d98df100c25db4598807162b10c097, type: 3}
     minCount: 30
     maxCount: 30
     spawnWeight: 1

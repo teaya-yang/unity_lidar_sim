@@ -99,8 +99,6 @@ public class EpisodeSweepRunner : MonoBehaviour
             seed        = seed,
             agents      = agentTotal,
             spawnRadius = cfg.spawnRadius,
-            minSpeed    = cfg.minSpeed,
-            maxSpeed    = cfg.maxSpeed,
             timestamp   = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         });
 
@@ -146,8 +144,6 @@ public class EpisodeSweepRunner : MonoBehaviour
         public int    seed;
         public int    agents;
         public float  spawnRadius;
-        public float  minSpeed;
-        public float  maxSpeed;
         public long   timestamp;
     }
 

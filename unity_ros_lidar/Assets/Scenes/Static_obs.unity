@@ -1202,8 +1202,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioManager
   config: {fileID: 11400000, guid: a4e2fe008a1a312edbae10a2c2263a70, type: 2}
-  agentPrefabs:
-  - {fileID: 403517184}
   egoVehicles:
   - {fileID: 1628374747}
   randomizers:
@@ -1245,7 +1243,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 64fc9cac3300eaaf69f71a8b3fb60520, type: 2}
   - {fileID: 11400000, guid: a80759f464efc092195d58793bc5010c, type: 2}
   seedCount: 10
-  episodeDuration: 30
+  episodeDuration: 3
   settleTime: 2
 --- !u!4 &1310844330
 Transform:

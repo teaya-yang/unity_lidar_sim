@@ -40,11 +40,6 @@ public class ScenarioConfig : ScriptableObject
              "Set to 0 to use each entry's own minCount/maxCount independently.")]
     [Min(0)] public int totalAgentBudget = 0;
 
-    // ── Speed ────────────────────────────────────────────────────────────────
-    [Header("Speed (applied to all ErraticAgent spawns)")]
-    public float minSpeed = 0.5f;
-    public float maxSpeed = 3.5f;
-
     // ── Spawn area ───────────────────────────────────────────────────────────
     [Header("Spawn area")]
     public float spawnRadius = 20f;
