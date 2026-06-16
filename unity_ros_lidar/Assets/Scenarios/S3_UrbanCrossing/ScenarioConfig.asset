@@ -12,12 +12,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7ad69a2dd3894242cab36745faffd18c, type: 3}
   m_Name: ScenarioConfig
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioConfig
-  agentCount: 5
-  agentTypes: 00000000
+  spawnEntries:
+  - label: Pedestrian
+    prefabs: []
+    minCount: 10
+    maxCount: 10
+    spawnWeight: 1
+  totalAgentBudget: 0
   minSpeed: 0.5
   maxSpeed: 3.5
-  spawnRadius: 20
-  spawnCenter: {x: 0, y: 0, z: 0}
+  spawnRadius: 10
+  spawnCenter: {x: -44, y: 0, z: 73.6}
   startleRadius: 12
   reactionBias: 1
   seed: 0

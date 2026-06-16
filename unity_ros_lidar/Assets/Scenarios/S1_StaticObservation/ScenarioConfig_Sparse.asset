@@ -12,8 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7ad69a2dd3894242cab36745faffd18c, type: 3}
   m_Name: ScenarioConfig_Sparse
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioConfig
-  agentCount: 5
-  agentTypes: 00000000
+  spawnEntries:
+  - label: Pedestrian
+    prefabs: []
+    minCount: 5
+    maxCount: 5
+    spawnWeight: 1
+  totalAgentBudget: 0
   minSpeed: 0.5
   maxSpeed: 3.5
   spawnRadius: 20

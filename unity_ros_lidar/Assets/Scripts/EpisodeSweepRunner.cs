@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 
 // Cycles through every (ScenarioConfig, seed) pair automatically.
@@ -11,6 +12,7 @@ public class EpisodeSweepRunner : MonoBehaviour
 {
     [Header("References")]
     public ScenarioManager scenarioManager;
+    public GroundTruthPublisher groundTruthPublisher;
 
     [Header("Configs to sweep (drag assets here in order)")]
     public ScenarioConfig[] configs;
@@ -76,19 +78,30 @@ public class EpisodeSweepRunner : MonoBehaviour
 
         int total = configs.Length * seedCount;
         int current = m_ConfigIndex * seedCount + m_SeedIndex + 1;
+
+        if (groundTruthPublisher != null)
+        {
+            groundTruthPublisher.currentEpisode = current;
+            groundTruthPublisher.currentConfig  = cfg.name;
+            groundTruthPublisher.currentSeed    = seed;
+            groundTruthPublisher.ResetFrame();
+        }
+        int agentTotal = cfg.spawnEntries != null
+            ? System.Linq.Enumerable.Sum(cfg.spawnEntries, e => e.resolvedCount)
+            : 0;
         Debug.Log($"[SWEEP] episode {current}/{total} | config={cfg.name} | seed={seed} | " +
-                  $"agents={cfg.agentCount} spawnRadius={cfg.spawnRadius}");
+                  $"agents={agentTotal} spawnRadius={cfg.spawnRadius}");
 
         m_Log.Add(new EpisodeRecord
         {
-            episode   = current,
-            config    = cfg.name,
-            seed      = seed,
-            agents    = cfg.agentCount,
+            episode     = current,
+            config      = cfg.name,
+            seed        = seed,
+            agents      = agentTotal,
             spawnRadius = cfg.spawnRadius,
-            minSpeed  = cfg.minSpeed,
-            maxSpeed  = cfg.maxSpeed,
-            timestamp = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            minSpeed    = cfg.minSpeed,
+            maxSpeed    = cfg.maxSpeed,
+            timestamp   = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         });
 
         m_Settling = true;

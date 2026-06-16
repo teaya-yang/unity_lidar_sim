@@ -1291,18 +1291,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioManager
   config: {fileID: 11400000, guid: 744727e589fe4deda797f63866e6e224, type: 2}
-  agentPrefab: {fileID: 403517184}
+  agentPrefabs:
+  - {fileID: 403517184}
   egoVehicles:
   - {fileID: 1628374747}
-  emergencyVehicles:
-  - {fileID: 2076865731}
-  patrolWaypoints:
-  - {fileID: 2047995156}
-  - {fileID: 500175629}
-  - {fileID: 899151502}
-  - {fileID: 1550729422}
-  ambulancePrefab: {fileID: 0}
-  ambulanceCount: 0
+  randomizers: []
 --- !u!1 &1310844328
 GameObject:
   m_ObjectHideFlags: 0

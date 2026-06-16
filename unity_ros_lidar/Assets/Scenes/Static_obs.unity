@@ -396,6 +396,55 @@ CapsuleCollider:
   m_Height: 1
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &517348863
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 517348865}
+  - component: {fileID: 517348864}
+  m_Layer: 0
+  m_Name: GTPublisher
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &517348864
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 517348863}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4368a63c20c204b948fc5f7bc8da7c95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GroundTruthPublisher
+  topic: /ground_truth/agents
+  publishRateHz: 10
+  currentEpisode: 0
+  currentConfig: 
+  currentSeed: 0
+--- !u!4 &517348865
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 517348863}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 13.88232, y: 0.00001, z: 20.5551}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &653569780
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -755,6 +804,57 @@ Transform:
   - {fileID: 1015213761}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &956597305
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 956597306}
+  - component: {fileID: 956597307}
+  m_Layer: 0
+  m_Name: patrol_randomizers
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &956597306
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 956597305}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1281236755}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &956597307
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 956597305}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3cd2404c9a229a88a8c6de71fa862c8b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PatrolPathRandomizer
+  enabledInSweep: 1
+  waypointCount: 4
+  minStepDistance: 5
+  maxStepDistance: 15
+  navMeshSnapRadius: 5
+  loopPath: 1
+  manager: {fileID: 1281236756}
 --- !u!1 &1015213760
 GameObject:
   m_ObjectHideFlags: 0
@@ -1084,7 +1184,9 @@ Transform:
   m_LocalPosition: {x: 7.79164, y: 0.00002, z: 13.53664}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 956597306}
+  - {fileID: 2095247308}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1281236756
@@ -1100,13 +1202,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioManager
   config: {fileID: 11400000, guid: a4e2fe008a1a312edbae10a2c2263a70, type: 2}
-  agentPrefab: {fileID: 403517184}
+  agentPrefabs:
+  - {fileID: 403517184}
   egoVehicles:
   - {fileID: 1628374747}
-  emergencyVehicles: []
-  patrolWaypoints: []
-  ambulancePrefab: {fileID: 0}
-  ambulanceCount: 0
+  randomizers:
+  - {fileID: 956597307}
+  - {fileID: 2095247307}
 --- !u!1 &1310844328
 GameObject:
   m_ObjectHideFlags: 0
@@ -1137,6 +1239,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EpisodeSweepRunner
   scenarioManager: {fileID: 1281236756}
+  groundTruthPublisher: {fileID: 517348864}
   configs:
   - {fileID: 11400000, guid: a4e2fe008a1a312edbae10a2c2263a70, type: 2}
   - {fileID: 11400000, guid: 64fc9cac3300eaaf69f71a8b3fb60520, type: 2}
@@ -1689,6 +1792,52 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: 0}
+--- !u!1 &2095247306
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2095247308}
+  - component: {fileID: 2095247307}
+  m_Layer: 0
+  m_Name: agent_randomizers
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2095247307
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2095247306}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f5cac63116cc2a6aacd59fb4192196e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AgentPlacementRandomizer
+  enabledInSweep: 1
+  manager: {fileID: 1281236756}
+--- !u!4 &2095247308
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2095247306}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1281236755}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1703,3 +1852,4 @@ SceneRoots:
   - {fileID: 315645481}
   - {fileID: 1281236755}
   - {fileID: 1310844330}
+  - {fileID: 517348865}

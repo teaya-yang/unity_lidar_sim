@@ -15,3 +15,6 @@ unity_ros_lidar/Assets/Quirky Series Ultimate/
 unity_ros_lidar/Assets/Quirky Series Ultimate.meta
 unity_ros_lidar/Assets/Scenarios/SCENARIOS.md
 unity_ros_lidar/Assets/Scenarios/SCENARIOS.md.meta
+
+# Bags data
+bags/

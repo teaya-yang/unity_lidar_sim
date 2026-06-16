@@ -8,53 +8,127 @@ public class ScenarioManager : MonoBehaviour
     public ScenarioConfig config;
 
     [Header("References")]
-    public GameObject agentPrefab;
+    [Tooltip("One or more ego vehicles respawned to their start pose at each episode reset.")]
     public Transform[] egoVehicles;
 
-    [Header("Optional wiring (S2 emergency / patrol scenes)")]
-    [Tooltip("Vehicles whose proximity makes patrolling agents go erratic (e.g. ambulance).")]
-    public Transform[] emergencyVehicles;
-    [Tooltip("Shared street route. If set, spawned agents patrol it instead of pure wandering.")]
-    public Transform[] patrolWaypoints;
-
-    [Header("Ambulance spawning (S2)")]
-    [Tooltip("Ambulance prefab to spawn at runtime. Leave null to use scene-placed emergencyVehicles only.")]
-    public GameObject ambulancePrefab;
-    [Tooltip("How many ambulances to spawn. They share patrolWaypoints, staggered by equal offsets.")]
-    public int ambulanceCount = 0;
+    [Header("Randomizer pipeline (optional)")]
+    [Tooltip("Ordered domain-randomization steps run at the start of each episode " +
+             "(Perception-style). Leave empty to use built-in inline placement. Order defines " +
+             "each randomizer's RNG stream — don't reorder mid-dataset or seeds stop reproducing.")]
+    public EpisodeRandomizer[] randomizers;
 
     readonly List<GameObject> m_SpawnedAgents = new();
-    readonly List<Transform>  m_SpawnedAmbulances = new();
 
-    void Start() => ResetEpisode(config != null ? config.seed : 0);
+    // Live agents for the current episode — randomizers (heading, scale, …) act on these.
+    public IReadOnlyList<GameObject> SpawnedAgents => m_SpawnedAgents;
+
+    // Ego vehicle home poses — captured once in Start(), restored every ResetEpisode().
+    struct Pose { public Vector3 pos; public Quaternion rot; }
+    Pose[] m_EgoPoses;
+
+    void Start()
+    {
+        CaptureEgoPoses();
+        ResetEpisode(config != null ? config.seed : 0);
+    }
 
     public void ResetEpisode(int seed)
     {
-        Random.InitState(seed);
         DestroyAgents();
-
-        SpawnAmbulances();
+        RestoreEgoPoses();
+        Random.InitState(seed);
 
         if (config == null) { Debug.LogError("[ScenarioManager] No ScenarioConfig assigned.", this); return; }
-        if (agentPrefab == null) {  Debug.LogError("[ScenarioManager] No agentPrefab assigned.", this); return; }
 
         Debug.Log($"[ScenarioManager] ResetEpisode seed={seed} | config={config.name} | " +
-                  $"agentCount={config.agentCount} spawnCenter={config.spawnCenter} spawnRadius={config.spawnRadius}", this);
+                  $"spawnCenter={config.spawnCenter} spawnRadius={config.spawnRadius}", this);
 
-        // Warn early if the spawn center is far from any NavMesh
+        if (randomizers != null && randomizers.Length > 0)
+        {
+            for (int i = 0; i < randomizers.Length; i++)
+            {
+                EpisodeRandomizer r = randomizers[i];
+                if (r == null || !r.enabledInSweep) continue;
+                r.Randomize(seed, i);
+            }
+        }
+        else
+        {
+            SpawnAllAgents();
+        }
+
+        // Reseed so spawned agents' runtime behavior (ErraticAgent speed/pause/jitter draws)
+        // reproduces from seed alone, independent of how many randomizers ran.
+        Random.InitState(seed);
+
+        Debug.Log($"[ScenarioManager] Spawned {m_SpawnedAgents.Count} agents.", this);
+    }
+
+    // Spawns all entries defined in config.spawnEntries.
+    // Called by AgentPlacementRandomizer and by the inline path when no randomizers are assigned.
+    public void SpawnAllAgents()
+    {
+        if (config.spawnEntries == null || config.spawnEntries.Length == 0)
+        {
+            Debug.LogWarning("[ScenarioManager] No spawnEntries defined in config. Nothing to spawn.", this);
+            return;
+        }
+
         if (!NavMesh.SamplePosition(config.spawnCenter, out _, config.spawnRadius * 2f, NavMesh.AllAreas))
             Debug.LogWarning($"[ScenarioManager] spawnCenter {config.spawnCenter} has NO NavMesh within " +
                              $"{config.spawnRadius * 2f} m. Bake a NavMesh that covers this area, " +
                              "or move spawnCenter onto the baked surface.", this);
 
-        int spawned = 0;
-        for (int i = 0; i < config.agentCount; i++)
-            if (SpawnAgent(i)) spawned++;
-
-        Debug.Log($"[ScenarioManager] Spawned {spawned}/{config.agentCount} agents.", this);
+        config.ResolveEntryCounts();
+        int globalIndex = 0;
+        foreach (SpawnEntry entry in config.spawnEntries)
+        {
+            Debug.Log($"[ScenarioManager] Entry '{entry.label}': spawning {entry.resolvedCount}.");
+            for (int i = 0; i < entry.resolvedCount; i++)
+                SpawnAgentFromEntry(globalIndex++, entry);
+        }
     }
 
-    bool SpawnAgent(int index)
+    // Spawns one agent chosen randomly from entry.prefabs.
+    // Handles both ErraticAgent (NavMesh pedestrian/animal) and ErraticVehicle prefabs.
+    bool SpawnAgentFromEntry(int index, SpawnEntry entry)
+    {
+        if (entry.prefabs == null || entry.prefabs.Length == 0)
+        {
+            Debug.LogWarning($"[ScenarioManager] Entry '{entry.label}' has no prefabs assigned.", this);
+            return false;
+        }
+
+        Vector3 spawnPos = SampleNavMeshPosition(index, entry.label);
+        if (spawnPos == Vector3.positiveInfinity) return false;
+
+        GameObject prefab = entry.prefabs[Random.Range(0, entry.prefabs.Length)];
+        GameObject go = Instantiate(prefab, spawnPos, Quaternion.identity);
+        go.name = $"{entry.label}_{index}";
+
+        ErraticAgent agent = go.GetComponent<ErraticAgent>();
+        if (agent != null)
+        {
+            agent.minSpeed      = config.minSpeed;
+            agent.maxSpeed      = config.maxSpeed;
+            agent.startleRadius = config.startleRadius;
+            agent.reactionBias  = config.reactionBias;
+            agent.egoVehicles   = egoVehicles;
+        }
+
+        ErraticVehicle vehicle = go.GetComponent<ErraticVehicle>();
+        if (vehicle != null)
+            vehicle.airplane = egoVehicles != null && egoVehicles.Length > 0 ? egoVehicles[0] : null;
+
+        if (agent == null && vehicle == null)
+            Debug.LogWarning($"[ScenarioManager] '{go.name}' has neither ErraticAgent nor ErraticVehicle.", this);
+
+        m_SpawnedAgents.Add(go);
+        return true;
+    }
+
+    // Returns a NavMesh-snapped position near spawnCenter, or Vector3.positiveInfinity on failure.
+    Vector3 SampleNavMeshPosition(int index, string label)
     {
         Vector3 candidate = config.spawnCenter +
             new Vector3(Random.Range(-config.spawnRadius, config.spawnRadius), 0f,
@@ -62,76 +136,37 @@ public class ScenarioManager : MonoBehaviour
 
         if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, config.spawnRadius, NavMesh.AllAreas))
         {
-            Debug.LogWarning($"[ScenarioManager] Agent_{index}: NavMesh sample FAILED " +
-                             $"at candidate {candidate} (searchRadius={config.spawnRadius}). " +
+            Debug.LogWarning($"[ScenarioManager] {label}_{index}: NavMesh sample FAILED at {candidate}. " +
                              "Move spawnCenter onto baked NavMesh, increase spawnRadius, or re-bake.", this);
-            return false;
+            return Vector3.positiveInfinity;
         }
 
-        Debug.Log($"[ScenarioManager] Agent_{index}: candidate={candidate} → snapped to {hit.position}", this);
-
-        GameObject go = Instantiate(agentPrefab, hit.position, Quaternion.identity);
-        go.name = $"Agent_{index}";
-
-        ErraticAgent agent = go.GetComponent<ErraticAgent>();
-        if (agent == null)
-        {
-            Debug.LogError($"[ScenarioManager] agentPrefab '{agentPrefab.name}' has no ErraticAgent component. " +
-                           "Add ErraticAgent to the prefab.", this);
-            return false;
-        }
-
-        agent.agentType = config.agentTypes.Length > 0
-            ? config.agentTypes[Random.Range(0, config.agentTypes.Length)]
-            : ErraticAgent.AgentType.Pedestrian;
-
-        agent.minSpeed          = config.minSpeed;
-        agent.maxSpeed          = config.maxSpeed;
-        agent.startleRadius     = config.startleRadius;
-        agent.reactionBias      = config.reactionBias;
-        agent.egoVehicles       = egoVehicles;
-        agent.emergencyVehicles = emergencyVehicles;
-        agent.patrolWaypoints   = patrolWaypoints;
-
-        m_SpawnedAgents.Add(go);
-        return true;
+        Debug.Log($"[ScenarioManager] {label}_{index}: candidate={candidate} → snapped to {hit.position}");
+        return hit.position;
     }
 
-    void SpawnAmbulances()
+    void CaptureEgoPoses()
     {
-        foreach (Transform t in m_SpawnedAmbulances)
-            if (t != null) Destroy(t.gameObject);
-        m_SpawnedAmbulances.Clear();
+        if (egoVehicles == null) return;
+        m_EgoPoses = new Pose[egoVehicles.Length];
+        for (int i = 0; i < egoVehicles.Length; i++)
+            if (egoVehicles[i] != null)
+                m_EgoPoses[i] = new Pose { pos = egoVehicles[i].position, rot = egoVehicles[i].rotation };
+    }
 
-        if (ambulancePrefab == null || ambulanceCount <= 0) return;
-
-        // Build combined list: scene-placed + runtime-spawned
-        var allEmergency = new List<Transform>(emergencyVehicles ?? System.Array.Empty<Transform>());
-
-        int wpCount = patrolWaypoints != null ? patrolWaypoints.Length : 0;
-        for (int i = 0; i < ambulanceCount; i++)
+    void RestoreEgoPoses()
+    {
+        if (egoVehicles == null || m_EgoPoses == null) return;
+        for (int i = 0; i < egoVehicles.Length; i++)
         {
-            // Start each ambulance at a different waypoint offset so they spread out
-            Vector3 spawnPos = wpCount > 0
-                ? patrolWaypoints[(i * (wpCount / Mathf.Max(ambulanceCount, 1))) % wpCount].position
-                : config.spawnCenter + new Vector3(i * 5f, 0f, 0f);
+            if (egoVehicles[i] == null) continue;
 
-            GameObject go = Instantiate(ambulancePrefab, spawnPos, Quaternion.identity);
-            go.name = $"Ambulance_{i}";
+            Rigidbody rb = egoVehicles[i].GetComponent<Rigidbody>();
+            if (rb != null) { rb.linearVelocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
 
-            ErraticVehicle ev = go.GetComponent<ErraticVehicle>();
-            if (ev != null)
-            {
-                ev.patrolWaypoints = patrolWaypoints;
-                ev.airplane = egoVehicles != null && egoVehicles.Length > 0 ? egoVehicles[0] : null;
-            }
-
-            m_SpawnedAmbulances.Add(go.transform);
-            allEmergency.Add(go.transform);
+            egoVehicles[i].SetPositionAndRotation(m_EgoPoses[i].pos, m_EgoPoses[i].rot);
         }
-
-        // Rebuild the array so spawned agents react to runtime ambulances too
-        emergencyVehicles = allEmergency.ToArray();
+        Debug.Log("[ScenarioManager] Ego vehicles reset to spawn pose.");
     }
 
     void DestroyAgents()
