@@ -100,8 +100,7 @@ public class GroundTruthPublisher : MonoBehaviour
         float sy = b.size.x;
         float sz = b.size.y;
 
-        sb.Append($"\"bbox\":{{\"cx\":{cx:F3},\"cy\":{cy:F3},\"cz\":{cz:F3},");
-        sb.Append($"\"sx\":{sx:F3},\"sy\":{sy:F3},\"sz\":{sz:F3}}}");
+        sb.Append($"\"bbox\":{{\"cx\":{cx:F3},\"cy\":{cy:F3},\"cz\":{cz:F3},\"sx\":{sx:F3},\"sy\":{sy:F3},\"sz\":{sz:F3}}}");
     }
 
     // Returns world-space AABB enclosing all Renderers on the GameObject and its children.
