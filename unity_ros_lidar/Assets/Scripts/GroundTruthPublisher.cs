@@ -160,7 +160,12 @@ public class GroundTruthPublisher : MonoBehaviour
         float sy = b.size.x;
         float sz = b.size.y;
 
-        sb.Append($"\"bbox\":{{\"cx\":{cx:F3},\"cy\":{cy:F3},\"cz\":{cz:F3},\"sx\":{sx:F3},\"sy\":{sy:F3},\"sz\":{sz:F3}}}");
+        // NOTE: close the bbox object in a separate Append. Writing `{sz:F3}}}` inline makes the
+        // C# compiler read the `}}` as an escaped brace *inside* the format clause, producing the
+        // custom format string "F3}" — which emits the literal text "F3}" and drops the value,
+        // yielding invalid JSON like `"sz":F3}`. Never abut an interpolation hole with `}}`.
+        sb.Append($"\"bbox\":{{\"cx\":{cx:F3},\"cy\":{cy:F3},\"cz\":{cz:F3},\"sx\":{sx:F3},\"sy\":{sy:F3},\"sz\":{sz:F3}");
+        sb.Append("}");
     }
 
     // Returns world-space AABB enclosing all Renderers on the GameObject and its children.

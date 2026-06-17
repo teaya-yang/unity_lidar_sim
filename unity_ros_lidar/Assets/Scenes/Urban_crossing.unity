@@ -2014,11 +2014,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioManager
   config: {fileID: 11400000, guid: e7ddf73ec6bb258d280a4371b062b4b0, type: 2}
-  agentPrefabs:
-  - {fileID: 403517184}
-  - {fileID: 1168458169}
   egoVehicles:
   - {fileID: 1628374747}
+  waypointSets: []
+  minEgoDistance: 10
   randomizers: []
 --- !u!1 &1541931809
 GameObject:

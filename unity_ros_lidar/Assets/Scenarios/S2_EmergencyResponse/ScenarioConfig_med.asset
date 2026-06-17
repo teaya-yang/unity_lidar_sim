@@ -16,14 +16,14 @@ MonoBehaviour:
   - label: People
     prefabs:
     - {fileID: 7897420823872174766, guid: 96d98df100c25db4598807162b10c097, type: 3}
-    minCount: 2
-    maxCount: 4
+    minCount: 4
+    maxCount: 6
     spawnWeight: 6
   - label: Ambulance
     prefabs:
     - {fileID: 1181029763419816, guid: e88383b28fa9049408fb72235350effe, type: 3}
     minCount: 1
-    maxCount: 1
+    maxCount: 2
     spawnWeight: 1
   totalAgentBudget: 0
   spawnRadius: 30

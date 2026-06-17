@@ -1046,7 +1046,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 744727e589fe4deda797f63866e6e224, type: 2}
   - {fileID: 11400000, guid: b3be7fbf50df2b964a75edf9e7dcfb51, type: 2}
   seedCount: 10
-  episodeDuration: 3
+  episodeDuration: 30
   settleTime: 2
 --- !u!4 &1310844330
 Transform:
