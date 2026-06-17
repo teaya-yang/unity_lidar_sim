@@ -10,6 +10,11 @@ public class GroundTruthPublisher : MonoBehaviour
     public string topic = "/ground_truth/agents";
     public double publishRateHz = 10.0;
 
+    [Header("Ego vehicle")]
+    [Tooltip("The ego sensor platform (Airplane). Its pose is published per frame as the " +
+             "nuScenes-style ego_pose. Leave null to auto-find the first ScenarioManager ego.")]
+    public Transform egoVehicle;
+
     [Header("Episode context (set by EpisodeSweepRunner or manually)")]
     public int currentEpisode;
     public string currentConfig;
@@ -29,6 +34,17 @@ public class GroundTruthPublisher : MonoBehaviour
         m_Ros = ROSConnection.GetOrCreateInstance();
         m_Ros.RegisterPublisher<StringMsg>(topic);
         m_LastPublishTime = Time.timeAsDouble - PublishPeriod;
+
+        if (egoVehicle == null)
+        {
+            ScenarioManager sm = Object.FindFirstObjectByType<ScenarioManager>();
+            if (sm != null && sm.egoVehicles != null && sm.egoVehicles.Length > 0)
+                egoVehicle = sm.egoVehicles[0];
+        }
+
+        if (egoVehicle == null)
+            Debug.LogWarning("[GroundTruthPublisher] No egoVehicle assigned and none found on a " +
+                             "ScenarioManager — ego_pose will be published as null.", this);
     }
 
     void Update()
@@ -48,12 +64,16 @@ public class GroundTruthPublisher : MonoBehaviour
         sb.Append($"\"config\":\"{currentConfig}\",");
         sb.Append($"\"seed\":{currentSeed},");
 
+        AppendEgoPose(sb);
+
         sb.Append("\"agents\":[");
         for (int i = 0; i < agents.Length; i++)
         {
             ErraticAgent a = agents[i];
             if (i > 0) sb.Append(",");
-            AppendPose(sb, i, a.agentType.ToString(), GetState(a), a.transform);
+            // GetInstanceID is stable for the object's lifetime (the episode), so the same
+            // physical agent keeps the same id across frames — required for instance/tracking.
+            AppendPose(sb, a.gameObject.GetInstanceID(), a.agentType.ToString(), GetState(a), a.transform);
             AppendBbox(sb, a.gameObject);
             sb.Append("}");
         }
@@ -64,7 +84,7 @@ public class GroundTruthPublisher : MonoBehaviour
         {
             ErraticVehicle v = vehicles[i];
             if (i > 0) sb.Append(",");
-            AppendPose(sb, i, "Vehicle", "Moving", v.transform);
+            AppendPose(sb, v.gameObject.GetInstanceID(), "Vehicle", "Moving", v.transform);
             AppendBbox(sb, v.gameObject);
             sb.Append("}");
         }
@@ -72,6 +92,41 @@ public class GroundTruthPublisher : MonoBehaviour
 
         m_Ros.Publish(topic, new StringMsg(sb.ToString()));
         m_LastPublishTime = Time.timeAsDouble;
+    }
+
+    // Appends the nuScenes-style ego_pose: global-frame translation + full orientation quaternion.
+    // Same global ROS frame as sample_annotation translations, so boxes and ego live in one frame.
+    void AppendEgoPose(StringBuilder sb)
+    {
+        if (egoVehicle == null)
+        {
+            sb.Append("\"ego\":null,");
+            return;
+        }
+
+        // Translation: Unity → ROS axis swap (same convention as objects).
+        Vector3 p = egoVehicle.position;
+        float tx =  p.z;
+        float ty = -p.x;
+        float tz =  p.y;
+
+        // Orientation: convert the full Unity quaternion into the ROS frame.
+        // ROS basis is (x=Unity z, y=-Unity x, z=Unity y); applying that change of basis to a
+        // quaternion (qx,qy,qz,qw) maps the vector part the same way the axis swap maps points.
+        Quaternion q = egoVehicle.rotation;
+        float qx =  q.z;
+        float qy = -q.x;
+        float qz =  q.y;
+        float qw =  q.w;
+
+        // Yaw kept too (heading about up axis) for convenience / consistency with objects.
+        float yaw = -egoVehicle.eulerAngles.y * Mathf.Deg2Rad;
+
+        sb.Append("\"ego\":{");
+        sb.Append($"\"tx\":{tx:F3},\"ty\":{ty:F3},\"tz\":{tz:F3},");
+        sb.Append($"\"qw\":{qw:F4},\"qx\":{qx:F4},\"qy\":{qy:F4},\"qz\":{qz:F4},");
+        sb.Append($"\"yaw\":{yaw:F4}");
+        sb.Append("},");
     }
 
     // Writes opening of a JSON object with pose fields (no closing brace — bbox is appended next).

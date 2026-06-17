@@ -142,9 +142,14 @@ One JSON object per frame with full scene state:
 {
   "stamp_sec": 42, "stamp_nsec": 100000000,
   "episode": 3, "config": "ScenarioConfig_Dense", "seed": 2,
+  "ego": {
+    "tx": 0.0, "ty": 0.0, "tz": 15.0,
+    "qw": 1.0, "qx": 0.0, "qy": 0.0, "qz": 0.0,
+    "yaw": 0.0
+  },
   "agents": [
     {
-      "id": 0,
+      "id": 12345,
       "type": "Pedestrian",
       "state": "Patrolling",
       "rx": 5.231, "ry": -2.100, "rz": 0.0,
@@ -155,7 +160,7 @@ One JSON object per frame with full scene state:
   ],
   "vehicles": [
     {
-      "id": 0,
+      "id": 67890,
       "type": "Vehicle",
       "state": "Moving",
       "rx": 12.0, "ry": -4.5, "rz": 0.0,
@@ -171,14 +176,60 @@ One JSON object per frame with full scene state:
 |---|---|
 | `stamp_sec/nsec` | ROS sim-time timestamp — matches the PointCloud2 header for frame pairing |
 | `episode/config/seed` | Which sweep episode this frame belongs to |
+| `ego` | Ego sensor platform (airplane) pose — global ROS frame, nuScenes-style `ego_pose` |
+| `ego.tx/ty/tz` | Ego translation, global ROS frame |
+| `ego.qw/qx/qy/qz` | Ego orientation quaternion, global ROS frame |
+| `id` | **Stable** per-object id (Unity `GetInstanceID`) — same object keeps its id across frames within an episode |
 | `type` | `Pedestrian`, `Animal`, or `Vehicle` |
-| `state` | `Patrolling`, `Wandering`, `Reacting`, or `Paused` |
-| `rx/ry/rz` | World position in ROS frame (x=forward, y=left, z=up) |
+| `state` | `Patrolling`, `Wandering`, `Reacting`, `Paused`, `Crossing`, or `Moving` |
+| `rx/ry/rz` | World position in ROS frame (x=forward, y=left, z=up) — object pivot |
 | `yaw` | Heading in radians, ROS convention |
 | `bbox.cx/cy/cz` | Bounding box **center** in ROS frame (not pivot point) |
-| `bbox.sx/sy/sz` | Bounding box **full extents** in metres |
+| `bbox.sx/sy/sz` | Bounding box **full extents** in metres (x=length, y=width, z=height) |
 
 **`sweep_log.json`** — written at `~/.config/unity3d/DefaultCompany/unity_ros_lidar_3d/sweep_log.json` at the end of the sweep. Maps each episode number to its config name, seed, agent count, and Unix timestamp — use this to slice the bag by episode in post-processing.
+
+### Converting to nuScenes format
+
+`scripts/bag_to_nuscenes.py` turns a recorded bag into a nuScenes-style dataset (subset
+of tables: `scene`, `sample`, `sample_data`, `sample_annotation`, `instance`, `category`,
+`attribute`, `visibility`, `ego_pose`, `calibrated_sensor`, `sensor`, `log`).
+
+```bash
+source /opt/ros/humble/setup.bash          # needs rclpy to deserialize the bag
+python3 scripts/bag_to_nuscenes.py \
+    --bag ~/Unity_Lidar_Sim/bags/sweep_s1_<timestamp> \
+    --out ~/Unity_Lidar_Sim/nuscenes_out \
+    --version v1.0-mini
+```
+
+Output layout:
+```
+nuscenes_out/
+  samples/LIDAR_TOP/<episode>_<frame>.pcd.bin   ← clouds, SENSOR frame, float32 x,y,z,intensity
+  v1.0-mini/*.json                               ← the metadata tables
+```
+
+Mapping and conventions:
+
+| Recorded data | nuScenes table |
+|---|---|
+| one episode | `scene` |
+| one GT frame | `sample` + `ego_pose` + `sample_data` |
+| one agent/vehicle in a frame | `sample_annotation` |
+| unique `(episode, id)` | `instance` |
+| `type` | `category` |
+| `state` | `attribute` |
+
+* **Every frame is a keyframe** — labelling is free in sim, so each `sample_data` is also a `sample` (`is_key_frame=true`).
+* **Frames**: `sample_annotation` + `ego_pose` are **global**; point clouds are written in the **sensor** frame so the nuScenes chain sensor→ego→global reconstructs global exactly. `calibrated_sensor` is identity (LiDAR coincident with ego — set its `translation`/`rotation` if you want the real lever-arm).
+* **`size`** is reordered to nuScenes `[width, length, height]` = `[bbox.sy, bbox.sx, bbox.sz]`.
+* **`num_lidar_pts`** is computed by a point-in-box test in the global frame.
+* **Tokens** are deterministic MD5 of a stable key, so re-running the converter is reproducible.
+
+> By default the converter assumes the recorded cloud is in the **global** frame (matches the
+> current `point_cloud` TODO below). If you fix the sensor to emit truly sensor-local points,
+> the global→sensor transform must be removed — adjust `convert()` accordingly.
 
 ### Replaying and inspecting
 
