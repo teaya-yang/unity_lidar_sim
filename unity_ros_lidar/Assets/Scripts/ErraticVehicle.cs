@@ -50,14 +50,30 @@ public class ErraticVehicle : MonoBehaviour
     int     m_PatrolDir = 1;
     Vector3 m_LastPos;
     bool    m_HasLastPos;
+    bool    m_Initialized;
 
-    void Start()
+    // Called by ScenarioManager immediately after assigning patrolWaypoints so the
+    // vehicle is ready regardless of when Unity calls Start().
+    public void Initialize()
     {
-        m_Speed = Random.Range(minSpeed, maxSpeed);
+        m_Initialized  = true;
+        m_Speed        = Random.Range(minSpeed, maxSpeed);
+        m_Stopped      = false;
+        m_Reacting     = false;
+        m_HasLastPos   = false;
+        m_PatrolIndex  = 0;
+        m_PatrolDir    = 1;
+
         if (patrolWaypoints != null && patrolWaypoints.Length > 0)
             m_Target = patrolWaypoints[0].position;
         else
             PickWaypoint();
+    }
+
+    void Start()
+    {
+        if (!m_Initialized)
+            Initialize();
     }
 
     void Update()

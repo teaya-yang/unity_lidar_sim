@@ -14,18 +14,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioConfig
   spawnEntries:
   - label: Pedestrian
-    prefabs: []
-    minCount: 3
-    maxCount: 4
+    prefabs:
+    - {fileID: 7897420823872174766, guid: 96d98df100c25db4598807162b10c097, type: 3}
+    minCount: 5
+    maxCount: 6
     spawnWeight: 4
-  - label: Ambulance
-    prefabs: []
-    minCount: 1
-    maxCount: 1
-    spawnWeight: 1
   totalAgentBudget: 0
-  minSpeed: 0.8
-  maxSpeed: 2.5
   spawnRadius: 30
   spawnCenter: {x: 0, y: 0, z: 25}
   startleRadius: 10

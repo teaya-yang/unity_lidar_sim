@@ -2,6 +2,15 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
+// Maps a SpawnEntry label to a set of scene waypoints.
+// Set label to match exactly the SpawnEntry.label in your ScenarioConfig.
+[System.Serializable]
+public class WaypointSet
+{
+    public string label;
+    public Transform[] waypoints;
+}
+
 public class ScenarioManager : MonoBehaviour
 {
     [Header("Config")]
@@ -10,6 +19,15 @@ public class ScenarioManager : MonoBehaviour
     [Header("References")]
     [Tooltip("One or more ego vehicles respawned to their start pose at each episode reset.")]
     public Transform[] egoVehicles;
+
+
+    [Header("Waypoints per entry type")]
+    [Tooltip("Match label to SpawnEntry.label. Waypoints are assigned to spawned agents at runtime.")]
+    public WaypointSet[] waypointSets;
+
+    [Header("Spawn exclusion")]
+    [Tooltip("Agents won't spawn closer than this to any ego vehicle (prevents spawning under wings).")]
+    public float minEgoDistance = 10f;
 
     [Header("Randomizer pipeline (optional)")]
     [Tooltip("Ordered domain-randomization steps run at the start of each episode " +
@@ -87,6 +105,8 @@ public class ScenarioManager : MonoBehaviour
             for (int i = 0; i < entry.resolvedCount; i++)
                 SpawnAgentFromEntry(globalIndex++, entry);
         }
+
+        WireEmergencyVehicles();
     }
 
     // Spawns one agent chosen randomly from entry.prefabs.
@@ -99,10 +119,30 @@ public class ScenarioManager : MonoBehaviour
             return false;
         }
 
-        Vector3 spawnPos = SampleNavMeshPosition(index, entry.label);
-        if (spawnPos == Vector3.positiveInfinity) return false;
-
         GameObject prefab = entry.prefabs[Random.Range(0, entry.prefabs.Length)];
+        Transform[] entryWaypoints = FindWaypoints(entry.label);
+
+        bool isVehicle = prefab.GetComponent<ErraticVehicle>() != null;
+
+        if (isVehicle && (entryWaypoints == null || entryWaypoints.Length == 0))
+            Debug.LogWarning($"[ScenarioManager] Vehicle entry '{entry.label}' has no waypoints. " +
+                             $"Add a WaypointSet whose label is exactly '{entry.label}', " +
+                             "or it will spawn near the ego and immediately pull over.", this);
+
+        // Vehicles drive a waypoint route off the pedestrian NavMesh, so spawn them on the
+        // route (first waypoint). Spawning them near spawnCenter would land them on top of
+        // the ego vehicle after a reset and make them immediately pull over.
+        Vector3 spawnPos;
+        if (isVehicle && entryWaypoints != null && entryWaypoints.Length > 0 && entryWaypoints[0] != null)
+        {
+            spawnPos = entryWaypoints[0].position;
+        }
+        else
+        {
+            spawnPos = SampleNavMeshPosition(index, entry.label);
+            if (spawnPos == Vector3.positiveInfinity) return false;
+        }
+
         GameObject go = Instantiate(prefab, spawnPos, Quaternion.identity);
         go.name = $"{entry.label}_{index}";
 
@@ -111,14 +151,19 @@ public class ScenarioManager : MonoBehaviour
         {
             // Speed is kept from the prefab so each type can move at its own pace.
             // Only scenario-wide reaction settings are applied.
-            agent.startleRadius = config.startleRadius;
-            agent.reactionBias  = config.reactionBias;
-            agent.egoVehicles   = egoVehicles;
+            agent.startleRadius  = config.startleRadius;
+            agent.reactionBias   = config.reactionBias;
+            agent.egoVehicles    = egoVehicles;
+            agent.patrolWaypoints = entryWaypoints;
         }
 
         ErraticVehicle vehicle = go.GetComponent<ErraticVehicle>();
         if (vehicle != null)
-            vehicle.airplane = egoVehicles != null && egoVehicles.Length > 0 ? egoVehicles[0] : null;
+        {
+            vehicle.airplane        = egoVehicles != null && egoVehicles.Length > 0 ? egoVehicles[0] : null;
+            vehicle.patrolWaypoints = entryWaypoints;
+            vehicle.Initialize();
+        }
 
         if (agent == null && vehicle == null)
             Debug.LogWarning($"[ScenarioManager] '{go.name}' has neither ErraticAgent nor ErraticVehicle.", this);
@@ -127,22 +172,76 @@ public class ScenarioManager : MonoBehaviour
         return true;
     }
 
-    // Returns a NavMesh-snapped position near spawnCenter, or Vector3.positiveInfinity on failure.
-    Vector3 SampleNavMeshPosition(int index, string label)
+    // Builds the combined emergency vehicle list (scene-placed + runtime-spawned ErraticVehicles)
+    // and assigns it to every spawned ErraticAgent.
+    void WireEmergencyVehicles()
     {
-        Vector3 candidate = config.spawnCenter +
-            new Vector3(Random.Range(-config.spawnRadius, config.spawnRadius), 0f,
-                        Random.Range(-config.spawnRadius, config.spawnRadius));
+        var all = new List<Transform>();
 
-        if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, config.spawnRadius, NavMesh.AllAreas))
+        foreach (GameObject go in m_SpawnedAgents)
         {
-            Debug.LogWarning($"[ScenarioManager] {label}_{index}: NavMesh sample FAILED at {candidate}. " +
-                             "Move spawnCenter onto baked NavMesh, increase spawnRadius, or re-bake.", this);
-            return Vector3.positiveInfinity;
+            if (go != null && go.GetComponent<ErraticVehicle>() != null)
+                all.Add(go.transform);
         }
 
-        Debug.Log($"[ScenarioManager] {label}_{index}: candidate={candidate} → snapped to {hit.position}");
-        return hit.position;
+        if (all.Count == 0) return;
+
+        Transform[] combined = all.ToArray();
+        foreach (GameObject go in m_SpawnedAgents)
+        {
+            ErraticAgent agent = go != null ? go.GetComponent<ErraticAgent>() : null;
+            if (agent != null)
+                agent.emergencyVehicles = combined;
+        }
+
+        Debug.Log($"[ScenarioManager] Wired {combined.Length} emergency vehicle(s) onto agents.");
+    }
+
+    // Returns the waypoints assigned to a given entry label, or null if none defined.
+    Transform[] FindWaypoints(string label)
+    {
+        if (waypointSets == null) return null;
+        foreach (WaypointSet ws in waypointSets)
+            if (ws.label == label) return ws.waypoints;
+        return null;
+    }
+
+    // Returns a NavMesh-snapped position near spawnCenter that is at least minEgoDistance
+    // from every ego vehicle. Returns Vector3.positiveInfinity if no valid position is found.
+    Vector3 SampleNavMeshPosition(int index, string label)
+    {
+        const int maxAttempts = 10;
+        for (int attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            Vector3 candidate = config.spawnCenter +
+                new Vector3(Random.Range(-config.spawnRadius, config.spawnRadius), 0f,
+                            Random.Range(-config.spawnRadius, config.spawnRadius));
+
+            if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, config.spawnRadius, NavMesh.AllAreas))
+                continue;
+
+            if (IsTooCloseToEgo(hit.position))
+                continue;
+
+            Debug.Log($"[ScenarioManager] {label}_{index}: snapped to {hit.position} (attempt {attempt + 1})");
+            return hit.position;
+        }
+
+        Debug.LogWarning($"[ScenarioManager] {label}_{index}: failed to find a valid spawn position " +
+                         $"after {maxAttempts} attempts. Increase spawnRadius or reduce minEgoDistance.", this);
+        return Vector3.positiveInfinity;
+    }
+
+    bool IsTooCloseToEgo(Vector3 pos)
+    {
+        if (egoVehicles == null) return false;
+        foreach (Transform ego in egoVehicles)
+        {
+            if (ego == null) continue;
+            if (Vector3.Distance(pos, ego.position) < minEgoDistance)
+                return true;
+        }
+        return false;
     }
 
     void CaptureEgoPoses()

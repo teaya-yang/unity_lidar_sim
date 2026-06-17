@@ -33,13 +33,11 @@ public class ErraticAgent : MonoBehaviour
     [Header("Direction Reversal")]
     [Range(0f, 1f)] public float reversalProbabilityPerSecond = 0.04f;
 
-    // ── Patrol path ───────────────────────────────────────────────────────────
     [Header("Patrol Path")]
     [Tooltip("Assign street waypoints to make this agent walk a predictable route. Leave empty for fully erratic.")]
     public Transform[] patrolWaypoints;
     public bool loopPatrol = true;
 
-    // ── Emergency switch ──────────────────────────────────────────────────────
     [Header("Emergency Switch")]
     [Tooltip("Vehicles whose proximity triggers panic (e.g. ambulance). Separate from ego vehicle.")]
     public Transform[] emergencyVehicles;
@@ -50,7 +48,6 @@ public class ErraticAgent : MonoBehaviour
     [Tooltip("Seconds of erratic wandering before returning to patrol. -1 = never return.")]
     public float erraticDuration = 15f;
 
-    // ── Ego vehicle reaction ──────────────────────────────────────────────────
     [Header("Ego Vehicle Reaction")]
     public Transform[] egoVehicles;
     public float startleRadius = 12f;
@@ -62,6 +59,7 @@ public class ErraticAgent : MonoBehaviour
     Vector3 currentTarget;
     float pauseTimer;
     float erraticTimer;
+    float m_DebugLogTimer;
     int m_PatrolIndex;
     int m_PatrolDir = 1;
 
@@ -72,6 +70,10 @@ public class ErraticAgent : MonoBehaviour
     {
         navAgent = GetComponent<NavMeshAgent>();
         navAgent.speed = Random.Range(minSpeed, maxSpeed);
+
+        int evCount = emergencyVehicles != null ? emergencyVehicles.Length : 0;
+        Debug.Log($"[ErraticAgent] '{name}' Start — emergencyVehicles wired: {evCount}, " +
+                  $"emergencyRadius={emergencyRadius}", this);
 
         if (patrolWaypoints != null && patrolWaypoints.Length > 0)
             EnterPatrol();
@@ -93,8 +95,6 @@ public class ErraticAgent : MonoBehaviour
             case State.Patrolling: UpdatePatrolling(); break;
         }
     }
-
-    // ── Patrol ────────────────────────────────────────────────────────────────
 
     void EnterPatrol()
     {
@@ -144,14 +144,32 @@ public class ErraticAgent : MonoBehaviour
 
     void CheckEmergency()
     {
-        if (emergencyVehicles == null || state == State.Reacting || state == State.Wandering) return;
+        if (emergencyVehicles == null || emergencyVehicles.Length == 0)
+        {
+            m_DebugLogTimer -= Time.deltaTime;
+            if (m_DebugLogTimer <= 0f)
+            {
+                Debug.LogWarning($"[ErraticAgent] '{name}' — no emergencyVehicles wired, panic can never trigger.", this);
+                m_DebugLogTimer = 5f;
+            }
+            return;
+        }
+
+        if (state == State.Reacting || state == State.Wandering) return;
+
+        m_DebugLogTimer -= Time.deltaTime;
+        bool logThisFrame = m_DebugLogTimer <= 0f;
+        if (logThisFrame) m_DebugLogTimer = 3f;
+
         foreach (Transform t in emergencyVehicles)
         {
             if (t == null) continue;
             float dist = Vector3.Distance(transform.position, t.position);
+            if (logThisFrame)
+                Debug.Log($"[ErraticAgent] '{name}' dist to '{t.name}': {dist:F1} m (panic radius={emergencyRadius})", this);
             if (dist < emergencyRadius)
             {
-                Debug.Log($"[ErraticAgent] '{name}' PANIC — '{t.name}' is {dist:F1} m away (radius={emergencyRadius}). {state} → Wandering", this);
+                Debug.Log($"[ErraticAgent] '{name}' PANIC — '{t.name}' is {dist:F1} m away. {state} → Wandering", this);
                 EnterErratic();
                 return;
             }
