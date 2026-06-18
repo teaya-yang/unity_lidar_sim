@@ -8,11 +8,6 @@ unity_ros_lidar/obj/
 unity_ros_lidar/Build/
 unity_ros_lidar/Builds/
 
-# Asset Store imports (large binaries, reinstall from Package Manager)
-unity_ros_lidar/Assets/ALSTRA INFINITE/
-unity_ros_lidar/Assets/ALSTRA INFINITE.meta
-unity_ros_lidar/Assets/Quirky Series Ultimate/
-unity_ros_lidar/Assets/Quirky Series Ultimate.meta
 unity_ros_lidar/Assets/Scenarios/SCENARIOS.md
 unity_ros_lidar/Assets/Scenarios/SCENARIOS.md.meta
 
