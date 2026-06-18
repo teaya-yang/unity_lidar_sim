@@ -293,8 +293,6 @@ public class ErraticAgent : MonoBehaviour
         }
     }
 
-    // ── Stochastic behaviours ─────────────────────────────────────────────────
-
     void EnterPause()
     {
         if (state != State.Wandering && state != State.Patrolling) return;

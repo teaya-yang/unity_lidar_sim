@@ -1040,7 +1040,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EpisodeSweepRunner
   scenarioManager: {fileID: 1281236756}
-  groundTruthPublisher: {fileID: 0}
+  groundTruthPublisher: {fileID: 2137291263}
   configs:
   - {fileID: 11400000, guid: c0a08dd3fd9a7703db29da49704edd1f, type: 2}
   - {fileID: 11400000, guid: 744727e589fe4deda797f63866e6e224, type: 2}
@@ -1786,6 +1786,56 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2137291262
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2137291264}
+  - component: {fileID: 2137291263}
+  m_Layer: 0
+  m_Name: GroudTruthPublisher
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2137291263
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2137291262}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4368a63c20c204b948fc5f7bc8da7c95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GroundTruthPublisher
+  topic: /ground_truth/agents
+  publishRateHz: 10
+  egoVehicle: {fileID: 1628374747}
+  currentEpisode: 0
+  currentConfig: 
+  currentSeed: 0
+--- !u!4 &2137291264
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2137291262}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.00002, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1802,3 +1852,4 @@ SceneRoots:
   - {fileID: 1760079570}
   - {fileID: 2069624979}
   - {fileID: 1767412350}
+  - {fileID: 2137291264}

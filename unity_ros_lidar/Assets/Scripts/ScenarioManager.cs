@@ -29,6 +29,10 @@ public class ScenarioManager : MonoBehaviour
     [Tooltip("Agents won't spawn closer than this to any ego vehicle (prevents spawning under wings).")]
     public float minEgoDistance = 10f;
 
+    [Tooltip("Agents won't spawn closer than this (centre-to-centre, metres) to another already-placed " +
+             "agent/vehicle, so they don't stack. 0 disables the check. Set ~ the agent footprint.")]
+    public float minAgentSpacing = 1.5f;
+
     [Header("Randomizer pipeline (optional)")]
     [Tooltip("Ordered domain-randomization steps run at the start of each episode " +
              "(Perception-style). Leave empty to use built-in inline placement. Order defines " +
@@ -140,7 +144,10 @@ public class ScenarioManager : MonoBehaviour
         else
         {
             spawnPos = SampleNavMeshPosition(index, entry.label);
-            if (spawnPos == Vector3.positiveInfinity) return false;
+            // Use float.IsPositiveInfinity, not `== Vector3.positiveInfinity`: Vector3's == is an
+            // approximate (a-b).sqrMagnitude compare that is NaN (never true) for infinity, which
+            // would let a failed placement spawn the agent at (∞,∞,∞).
+            if (float.IsPositiveInfinity(spawnPos.x)) return false;
         }
 
         GameObject go = Instantiate(prefab, spawnPos, Quaternion.identity);
@@ -223,6 +230,13 @@ public class ScenarioManager : MonoBehaviour
             if (IsTooCloseToEgo(hit.position))
                 continue;
 
+            // Reject candidates that stack on an already-placed agent/vehicle. NavMesh.SamplePosition
+            // can collapse several random candidates onto the same nearby point, so without this two
+            // agents can share a spot; nothing pushes them apart at spawn (no Rigidbody sim, and
+            // NavMesh avoidance only acts later, during navigation).
+            if (IsTooCloseToAgents(hit.position))
+                continue;
+
             Debug.Log($"[ScenarioManager] {label}_{index}: snapped to {hit.position} (attempt {attempt + 1})");
             return hit.position;
         }
@@ -239,6 +253,20 @@ public class ScenarioManager : MonoBehaviour
         {
             if (ego == null) continue;
             if (Vector3.Distance(pos, ego.position) < minEgoDistance)
+                return true;
+        }
+        return false;
+    }
+
+    // True if pos is within minAgentSpacing of any agent/vehicle already spawned this episode.
+    // Checked during placement so independently-sampled agents don't end up stacked.
+    bool IsTooCloseToAgents(Vector3 pos)
+    {
+        if (minAgentSpacing <= 0f) return false;
+        foreach (GameObject go in m_SpawnedAgents)
+        {
+            if (go == null) continue;
+            if (Vector3.Distance(pos, go.transform.position) < minAgentSpacing)
                 return true;
         }
         return false;

@@ -70,7 +70,10 @@ public class PatrolPathRandomizer : EpisodeRandomizer
         for (int i = 0; i < waypointCount; i++)
         {
             Vector3 candidate = SampleNextPoint(current);
-            if (candidate == Vector3.positiveInfinity)
+            // float.IsPositiveInfinity, not `== Vector3.positiveInfinity`: Vector3's == compares
+            // (a-b).sqrMagnitude which is NaN (never true) for infinity, so the sentinel would slip
+            // through and add a waypoint at (∞,∞,∞).
+            if (float.IsPositiveInfinity(candidate.x))
             {
                 Debug.LogWarning($"[PatrolPathRandomizer] Could not find NavMesh point after {current}. " +
                                  "Stopping path early.");
