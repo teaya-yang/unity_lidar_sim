@@ -33,6 +33,16 @@ public class ROSTransformTreePublisher : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
+        EnsureInitialized();
+        m_LastPublishTimeSeconds = Clock.time + PublishPeriodSeconds;
+    }
+
+    // Idempotent: guarantees the transform root and publisher exist before any publish,
+    // even if Start() was skipped or ran out of order relative to the connection.
+    void EnsureInitialized()
+    {
+        if (m_TransformRoot != null) return;
+
         if (m_RootGameObject == null)
         {
             Debug.LogWarning($"No GameObject explicitly defined as {nameof(m_RootGameObject)}, so using {name} as root.");
@@ -42,7 +52,6 @@ public class ROSTransformTreePublisher : MonoBehaviour
         m_ROS = ROSConnection.GetOrCreateInstance();
         m_TransformRoot = new TransformTreeNode(m_RootGameObject);
         m_ROS.RegisterPublisher<TFMessageMsg>(k_TfTopic);
-        m_LastPublishTimeSeconds = Clock.time + PublishPeriodSeconds;
     }
 
     static void PopulateTFList(List<TransformStampedMsg> tfList, TransformTreeNode tfNode)
@@ -116,6 +125,7 @@ public class ROSTransformTreePublisher : MonoBehaviour
     {
         if (ShouldPublishMessage)
         {
+            EnsureInitialized();
             PublishMessage();
         }
 

@@ -1,52 +1,28 @@
 using UnityEngine;
 using UnityEngine.AI;
 
-// Four-state pedestrian/animal AI: Patrolling (follows a street path), Wandering (fully
-// erratic), Paused, Crossing, and Reacting (to ego vehicle).
-// Emergency vehicles (ambulance) trigger an immediate switch from Patrol → Wandering.
-// After erraticDuration seconds the agent returns to its patrol path automatically.
+// NavMesh-based NPC pedestrian / ground crew.
+// Mirrors AWSIM's NPC pattern: follows a lane's waypoints, pauses randomly,
+// and reacts to the ego aircraft.  All random wandering has been removed.
+// Implements IApronNpc so ApronTrafficManager can spawn and wire it.
 [RequireComponent(typeof(NavMeshAgent))]
-public class ErraticAgent : MonoBehaviour
+public class ErraticAgent : MonoBehaviour, IApronNpc
 {
     public enum AgentType { Pedestrian, Animal }
 
     [Header("Agent Type")]
     public AgentType agentType = AgentType.Pedestrian;
 
-    [Header("Wandering")]
-    public float wanderRadius = 20f;
-    public float waypointReachedDistance = 1f;
-
-    [Header("Speed")]
+    [Header("Movement")]
     public float minSpeed = 0.5f;
     public float maxSpeed = 3.5f;
+    public float waypointReachedDistance = 1f;
+    public bool  loopPatrol = true;
 
     [Header("Micro-stops")]
-    [Range(0f, 1f)] public float pauseProbabilityPerSecond = 0.08f;
+    [Range(0f, 1f)] public float pauseProbabilityPerSecond = 0.06f;
     public float minPauseDuration = 0.5f;
-    public float maxPauseDuration = 4f;
-
-    [Header("Waypoint Jitter")]
-    [Range(0f, 1f)] public float jitterProbabilityPerSecond = 0.12f;
-    public float jitterRadius = 4f;
-
-    [Header("Direction Reversal")]
-    [Range(0f, 1f)] public float reversalProbabilityPerSecond = 0.04f;
-
-    [Header("Patrol Path")]
-    [Tooltip("Assign street waypoints to make this agent walk a predictable route. Leave empty for fully erratic.")]
-    public Transform[] patrolWaypoints;
-    public bool loopPatrol = true;
-
-    [Header("Emergency Switch")]
-    [Tooltip("Vehicles whose proximity triggers panic (e.g. ambulance). Separate from ego vehicle.")]
-    public Transform[] emergencyVehicles;
-    public float emergencyRadius = 20f;
-    [Range(0f, 1f)]
-    [Tooltip("Per-second chance of spontaneously going erratic even without an emergency.")]
-    public float erraticSwitchChancePerSecond = 0.01f;
-    [Tooltip("Seconds of erratic wandering before returning to patrol. -1 = never return.")]
-    public float erraticDuration = 15f;
+    public float maxPauseDuration = 3f;
 
     [Header("Ego Vehicle Reaction")]
     public Transform[] egoVehicles;
@@ -55,181 +31,145 @@ public class ErraticAgent : MonoBehaviour
     public float reactionBias = 1f;
     public float reactionSpeedMultiplier = 2f;
 
-    NavMeshAgent navAgent;
-    Vector3 currentTarget;
-    float pauseTimer;
-    float erraticTimer;
-    float m_DebugLogTimer;
-    int m_PatrolIndex;
-    int m_PatrolDir = 1;
+    // ── IApronNpc ─────────────────────────────────────────────────────────────
 
-    enum State { Wandering, Paused, Crossing, Reacting, Patrolling }
-    State state = State.Wandering;
+    public bool ShouldDespawn => false;
+
+    public Bounds Bounds
+    {
+        get
+        {
+            Renderer[] rs = GetComponentsInChildren<Renderer>();
+            if (rs.Length == 0) return new Bounds(transform.position, Vector3.one);
+            Bounds b = rs[0].bounds;
+            for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+            return b;
+        }
+    }
+
+    // Called by NavMeshApronSimulator after spawn.
+    // startLane: patrol lane assigned by NavMeshApronSimulatorConfig.patrolLane.
+    public void OnApronInitialize(TaxiwayLane startLane, Transform[] egoVehicles)
+    {
+        this.egoVehicles = egoVehicles;
+        if (startLane != null && startLane.Waypoints != null && startLane.Waypoints.Length > 0)
+            _laneWaypoints = startLane.Waypoints;
+    }
+
+    // True when a patrol path is available — used by GroundTruthPublisher.
+    public bool HasPatrolPath => _laneWaypoints != null && _laneWaypoints.Length > 0;
+
+    // ── Runtime state ─────────────────────────────────────────────────────────
+
+    NavMeshAgent _nav;
+    Vector3[]    _laneWaypoints;
+    int          _waypointIndex;
+    int          _patrolDir = 1;
+    float        _pauseTimer;
+
+    enum State { Patrolling, Paused, Reacting }
+    State _state = State.Patrolling;
+
+    // ── Unity messages ────────────────────────────────────────────────────────
 
     void Start()
     {
-        navAgent = GetComponent<NavMeshAgent>();
-        navAgent.speed = Random.Range(minSpeed, maxSpeed);
+        _nav = GetComponent<NavMeshAgent>();
+        _nav.speed = Random.Range(minSpeed, maxSpeed);
 
-        int evCount = emergencyVehicles != null ? emergencyVehicles.Length : 0;
-        Debug.Log($"[ErraticAgent] '{name}' Start — emergencyVehicles wired: {evCount}, " +
-                  $"emergencyRadius={emergencyRadius}", this);
-
-        if (patrolWaypoints != null && patrolWaypoints.Length > 0)
+        if (HasPatrolPath)
             EnterPatrol();
         else
-            PickNewWaypoint();
+            Debug.LogWarning($"[ErraticAgent] '{name}' has no patrol lane — assign one via " +
+                             "NavMeshApronSimulatorConfig.patrolLane or it will stand still.", this);
     }
 
     void Update()
     {
-        CheckEmergency();
         CheckEgoReaction();
 
-        switch (state)
+        switch (_state)
         {
-            case State.Wandering:  UpdateWandering();  break;
-            case State.Paused:     UpdatePaused();     break;
-            case State.Crossing:   UpdateCrossing();   break;
-            case State.Reacting:   UpdateReacting();   break;
             case State.Patrolling: UpdatePatrolling(); break;
+            case State.Paused:     UpdatePaused();     break;
+            case State.Reacting:   UpdateReacting();   break;
         }
     }
 
+    // ── Patrol ────────────────────────────────────────────────────────────────
+
     void EnterPatrol()
     {
-        state = State.Patrolling;
-        navAgent.isStopped = false;
-        navAgent.speed = Random.Range(minSpeed, maxSpeed);
-        SetPatrolDestination();
+        _state = State.Patrolling;
+        _nav.isStopped = false;
+        _nav.speed     = Random.Range(minSpeed, maxSpeed);
+        SetDestinationToWaypoint();
     }
 
     void UpdatePatrolling()
     {
-        if (!navAgent.pathPending && navAgent.remainingDistance < waypointReachedDistance)
-            AdvancePatrol();
+        if (!_nav.pathPending && _nav.remainingDistance < waypointReachedDistance)
+            AdvanceWaypoint();
 
         if (Roll(pauseProbabilityPerSecond)) EnterPause();
-        if (Roll(erraticSwitchChancePerSecond)) EnterErratic();
-
-        if (agentType == AgentType.Animal) AnimateAnimalSpeed();
     }
 
-    void AdvancePatrol()
+    void AdvanceWaypoint()
     {
-        if (patrolWaypoints == null || patrolWaypoints.Length == 0) return;
+        if (!HasPatrolPath) return;
 
         if (loopPatrol)
         {
-            m_PatrolIndex = (m_PatrolIndex + 1) % patrolWaypoints.Length;
+            _waypointIndex = (_waypointIndex + 1) % _laneWaypoints.Length;
         }
         else
         {
-            m_PatrolIndex += m_PatrolDir;
-            if (m_PatrolIndex >= patrolWaypoints.Length - 1 || m_PatrolIndex <= 0)
-                m_PatrolDir *= -1;
+            _waypointIndex += _patrolDir;
+            if (_waypointIndex >= _laneWaypoints.Length - 1 || _waypointIndex <= 0)
+                _patrolDir *= -1;
         }
 
-        SetPatrolDestination();
+        SetDestinationToWaypoint();
     }
 
-    void SetPatrolDestination()
+    void SetDestinationToWaypoint()
     {
-        if (patrolWaypoints == null || m_PatrolIndex >= patrolWaypoints.Length) return;
-        Transform wp = patrolWaypoints[m_PatrolIndex];
-        if (wp != null) TrySetDestination(wp.position, 5f);
+        if (!HasPatrolPath || _waypointIndex >= _laneWaypoints.Length) return;
+        TrySetDestination(_laneWaypoints[_waypointIndex], 5f);
     }
 
-    // ── Emergency switch ──────────────────────────────────────────────────────
+    // ── Pause ─────────────────────────────────────────────────────────────────
 
-    void CheckEmergency()
+    void EnterPause()
     {
-        if (emergencyVehicles == null || emergencyVehicles.Length == 0)
-        {
-            m_DebugLogTimer -= Time.deltaTime;
-            if (m_DebugLogTimer <= 0f)
-            {
-                Debug.LogWarning($"[ErraticAgent] '{name}' — no emergencyVehicles wired, panic can never trigger.", this);
-                m_DebugLogTimer = 5f;
-            }
-            return;
-        }
-
-        if (state == State.Reacting || state == State.Wandering) return;
-
-        m_DebugLogTimer -= Time.deltaTime;
-        bool logThisFrame = m_DebugLogTimer <= 0f;
-        if (logThisFrame) m_DebugLogTimer = 3f;
-
-        foreach (Transform t in emergencyVehicles)
-        {
-            if (t == null) continue;
-            float dist = Vector3.Distance(transform.position, t.position);
-            if (logThisFrame)
-                Debug.Log($"[ErraticAgent] '{name}' dist to '{t.name}': {dist:F1} m (panic radius={emergencyRadius})", this);
-            if (dist < emergencyRadius)
-            {
-                Debug.Log($"[ErraticAgent] '{name}' PANIC — '{t.name}' is {dist:F1} m away. {state} → Wandering", this);
-                EnterErratic();
-                return;
-            }
-        }
-    }
-
-    // Switch from patrol to full erratic; restores patrol after erraticDuration.
-    void EnterErratic()
-    {
-        state = State.Wandering;
-        navAgent.isStopped = false;
-        navAgent.speed = Random.Range(minSpeed, maxSpeed);
-        erraticTimer = erraticDuration;
-        PickNewWaypoint();
-    }
-
-    // ── State updates ──────────────────────────────────────────────────────────
-
-    void UpdateWandering()
-    {
-        if (!navAgent.pathPending && navAgent.remainingDistance < waypointReachedDistance)
-            PickNewWaypoint();
-
-        if (Roll(pauseProbabilityPerSecond))    EnterPause();
-        if (Roll(jitterProbabilityPerSecond))   JitterTarget();
-        if (Roll(reversalProbabilityPerSecond)) ReverseDirection();
-
-        if (agentType == AgentType.Animal) AnimateAnimalSpeed();
-
-        // count down back to patrol path
-        if (patrolWaypoints != null && patrolWaypoints.Length > 0 && erraticDuration >= 0f)
-        {
-            erraticTimer -= Time.deltaTime;
-            if (erraticTimer <= 0f) EnterPatrol();
-        }
+        if (_state == State.Reacting) return;
+        _state           = State.Paused;
+        _nav.isStopped   = true;
+        _pauseTimer      = Random.Range(minPauseDuration, maxPauseDuration);
     }
 
     void UpdatePaused()
     {
-        pauseTimer -= Time.deltaTime;
-        if (pauseTimer > 0f) return;
-
-        navAgent.isStopped = false;
-        navAgent.speed = Random.Range(minSpeed, maxSpeed);
-
-        bool shouldPatrol = patrolWaypoints != null && patrolWaypoints.Length > 0
-                            && (erraticDuration < 0f || erraticTimer > 0f);
-        if (shouldPatrol)
-            EnterPatrol();
-        else
-        {
-            state = State.Wandering;
-            PickNewWaypoint();
-        }
+        _pauseTimer -= Time.deltaTime;
+        if (_pauseTimer > 0f) return;
+        EnterPatrol();
     }
 
-    void UpdateCrossing()
+    // ── Ego reaction ──────────────────────────────────────────────────────────
+
+    void CheckEgoReaction()
     {
-        if (!navAgent.pathPending && navAgent.remainingDistance < waypointReachedDistance)
-            ExitCrossing();
+        Transform closest = ClosestEgoInRange();
+        if (closest != null && _state != State.Reacting) EnterReaction(closest);
+        if (closest == null && _state == State.Reacting) ExitReaction();
+    }
+
+    void EnterReaction(Transform ego)
+    {
+        _state     = State.Reacting;
+        _nav.isStopped = false;
+        _nav.speed = Random.Range(minSpeed, maxSpeed) * reactionSpeedMultiplier;
+        SetReactionTarget(ego);
     }
 
     void UpdateReacting()
@@ -237,41 +177,29 @@ public class ErraticAgent : MonoBehaviour
         Transform closest = ClosestEgoInRange();
         if (closest == null) { ExitReaction(); return; }
 
-        if (!navAgent.pathPending && navAgent.remainingDistance < waypointReachedDistance)
+        if (!_nav.pathPending && _nav.remainingDistance < waypointReachedDistance)
             SetReactionTarget(closest);
-    }
-
-    // ── Ego vehicle reaction ───────────────────────────────────────────────────
-
-    void CheckEgoReaction()
-    {
-        if (state == State.Crossing) return;
-
-        Transform closest = ClosestEgoInRange();
-        if (closest != null && state != State.Reacting) EnterReaction(closest);
-        if (closest == null && state == State.Reacting) ExitReaction();
-    }
-
-    void EnterReaction(Transform ego)
-    {
-        state = State.Reacting;
-        navAgent.speed = Random.Range(minSpeed, maxSpeed) * reactionSpeedMultiplier;
-        SetReactionTarget(ego);
     }
 
     void SetReactionTarget(Transform ego)
     {
         if (ego == null) return;
-        Vector3 dir = (transform.position - ego.position).normalized * Mathf.Sign(reactionBias);
-        Vector3 candidate = transform.position + dir * wanderRadius * 0.5f;
-        TrySetDestination(candidate, wanderRadius);
+        Vector3 dir       = (transform.position - ego.position).normalized * Mathf.Sign(reactionBias);
+        Vector3 candidate = transform.position + dir * startleRadius * 1.5f;
+        TrySetDestination(candidate, startleRadius * 2f);
+    }
+
+    void ExitReaction()
+    {
+        _nav.speed = Random.Range(minSpeed, maxSpeed);
+        EnterPatrol();
     }
 
     Transform ClosestEgoInRange()
     {
-        Transform best = null;
-        float bestDist = startleRadius;
         if (egoVehicles == null) return null;
+        Transform best   = null;
+        float     bestDist = startleRadius;
         foreach (Transform t in egoVehicles)
         {
             if (t == null) continue;
@@ -281,113 +209,37 @@ public class ErraticAgent : MonoBehaviour
         return best;
     }
 
-    void ExitReaction()
-    {
-        navAgent.speed = Random.Range(minSpeed, maxSpeed);
-        if (patrolWaypoints != null && patrolWaypoints.Length > 0)
-            EnterPatrol();
-        else
-        {
-            state = State.Wandering;
-            PickNewWaypoint();
-        }
-    }
-
-    void EnterPause()
-    {
-        if (state != State.Wandering && state != State.Patrolling) return;
-        state = State.Paused;
-        navAgent.isStopped = true;
-        pauseTimer = Random.Range(minPauseDuration, maxPauseDuration);
-    }
-
-    void JitterTarget()
-    {
-        Vector3 jittered = currentTarget + new Vector3(
-            Random.Range(-jitterRadius, jitterRadius), 0f,
-            Random.Range(-jitterRadius, jitterRadius));
-        if (TrySetDestination(jittered, jitterRadius))
-            currentTarget = navAgent.destination;
-    }
-
-    void ReverseDirection()
-    {
-        Vector3 behind = transform.position - transform.forward * Random.Range(3f, wanderRadius * 0.4f);
-        TrySetDestination(behind, wanderRadius);
-    }
-
-    void PickNewWaypoint()
-    {
-        Vector3 randomDir = Random.insideUnitSphere * wanderRadius;
-        randomDir.y = 0f;
-        Vector3 candidate = transform.position + randomDir;
-        if (TrySetDestination(candidate, wanderRadius))
-            currentTarget = navAgent.destination;
-    }
-
-    void AnimateAnimalSpeed()
-    {
-        if (Roll(0.03f))
-            navAgent.speed = maxSpeed * 1.5f;
-        else
-            navAgent.speed = Mathf.Lerp(navAgent.speed, Random.Range(minSpeed, maxSpeed), Time.deltaTime * 0.4f);
-    }
-
-    // ── Street crossing (called externally by StreetCrossingZone) ─────────────
-
-    public void TriggerCrossing(Vector3 crossPoint)
-    {
-        // Already crossing — don't restart. Reacting is allowed to be overridden:
-        // crossing the street takes priority over startling at the ego vehicle.
-        if (state == State.Crossing) return;
-
-        // A NavMeshAgent only moves if it's actually placed on the navmesh. If the agent
-        // was spawned/dropped off the baked mesh, SetDestination silently does nothing.
-        if (navAgent == null || !navAgent.isOnNavMesh)
-        {
-            Debug.LogWarning($"[ErraticAgent] '{name}' is NOT on the NavMesh — can't cross. " +
-                             "Place agents on baked navmesh (snap them to the ground).", this);
-            return;
-        }
-
-        navAgent.isStopped = false;
-        navAgent.speed = Random.Range(minSpeed * 0.8f, maxSpeed * 1.3f);
-
-        // search a wide radius so a slightly-off crossTarget still resolves onto the navmesh
-        if (!TrySetDestination(crossPoint, 15f))
-        {
-            Debug.LogWarning($"[ErraticAgent] '{name}' could not reach crossTarget {crossPoint} " +
-                             "— no NavMesh within 15 m. Move the target onto baked navmesh.", this);
-            return;
-        }
-
-        Debug.Log($"[ErraticAgent] '{name}' crossing to {crossPoint}.", this);
-        state = State.Crossing;
-    }
-
-    void ExitCrossing()
-    {
-        navAgent.speed = Random.Range(minSpeed, maxSpeed);
-        if (patrolWaypoints != null && patrolWaypoints.Length > 0)
-            EnterPatrol();
-        else
-        {
-            state = State.Wandering;
-            PickNewWaypoint();
-        }
-    }
-
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     bool TrySetDestination(Vector3 candidate, float searchRadius)
     {
+        if (!_nav.isOnNavMesh) return false;
         NavMeshHit hit;
         if (!NavMesh.SamplePosition(candidate, out hit, searchRadius, NavMesh.AllAreas))
             return false;
-        navAgent.SetDestination(hit.position);
+        _nav.SetDestination(hit.position);
         return true;
     }
 
     bool Roll(float probabilityPerSecond) =>
         Random.value < probabilityPerSecond * Time.deltaTime;
+
+    // ── Gizmos ────────────────────────────────────────────────────────────────
+
+    void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawWireSphere(transform.position, startleRadius);
+
+        if (_laneWaypoints == null) return;
+        Gizmos.color = Color.yellow;
+        for (int i = 0; i < _laneWaypoints.Length - 1; i++)
+            Gizmos.DrawLine(_laneWaypoints[i], _laneWaypoints[i + 1]);
+
+        if (Application.isPlaying && _waypointIndex < _laneWaypoints.Length)
+        {
+            Gizmos.color = Color.red;
+            Gizmos.DrawLine(transform.position, _laneWaypoints[_waypointIndex]);
+        }
+    }
 }

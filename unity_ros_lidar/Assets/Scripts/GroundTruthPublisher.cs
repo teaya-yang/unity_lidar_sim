@@ -29,10 +29,11 @@ public class GroundTruthPublisher : MonoBehaviour
 
     public void ResetFrame() => m_Frame = 0;
 
+    bool m_Registered;
+
     void Start()
     {
-        m_Ros = ROSConnection.GetOrCreateInstance();
-        m_Ros.RegisterPublisher<StringMsg>(topic);
+        EnsureRegistered();
         m_LastPublishTime = Time.timeAsDouble - PublishPeriod;
 
         if (egoVehicle == null)
@@ -47,9 +48,20 @@ public class GroundTruthPublisher : MonoBehaviour
                              "ScenarioManager — ego_pose will be published as null.", this);
     }
 
+    // Idempotent: guarantees the publisher is registered before any Publish call,
+    // even if Start() was skipped or ran out of order relative to the connection.
+    void EnsureRegistered()
+    {
+        if (m_Registered) return;
+        m_Ros = ROSConnection.GetOrCreateInstance();
+        m_Ros.RegisterPublisher<StringMsg>(topic);
+        m_Registered = true;
+    }
+
     void Update()
     {
         if (!ShouldPublish) return;
+        EnsureRegistered();
 
         TimeStamp stamp = new TimeStamp(Clock.time);
         ErraticAgent[]  agents   = Object.FindObjectsByType<ErraticAgent>(FindObjectsSortMode.None);
@@ -84,7 +96,7 @@ public class GroundTruthPublisher : MonoBehaviour
         {
             ErraticVehicle v = vehicles[i];
             if (i > 0) sb.Append(",");
-            AppendPose(sb, v.gameObject.GetInstanceID(), "Vehicle", "Moving", v.transform);
+            AppendPose(sb, v.gameObject.GetInstanceID(), "Vehicle", GetVehicleState(v), v.transform);
             AppendBbox(sb, v.gameObject);
             sb.Append("}");
         }
@@ -186,11 +198,21 @@ public class GroundTruthPublisher : MonoBehaviour
     {
         var nav = a.GetComponent<UnityEngine.AI.NavMeshAgent>();
         if (nav == null) return "Unknown";
-        if (nav.isStopped)                        return "Paused";
-        if (nav.speed > a.maxSpeed * 1.4f)        return "Reacting";
-        if (a.patrolWaypoints != null
-            && a.patrolWaypoints.Length > 0
-            && nav.remainingDistance > 0.5f)      return "Patrolling";
+        if (nav.isStopped)                              return "Paused";
+        if (nav.speed > a.maxSpeed * 1.4f)              return "Reacting";
+        if (a.HasPatrolPath && nav.remainingDistance > 0.5f) return "Patrolling";
         return "Wandering";
+    }
+
+    static string GetVehicleState(ErraticVehicle v)
+    {
+        if (v.IsStopped)   return "Stopped";
+        if (v.IsReacting)  return "Reacting";
+        return v.CurrentRoutingMode switch
+        {
+            ErraticVehicle.RoutingMode.FixedRoute => "RoutePatrol",
+            ErraticVehicle.RoutingMode.RandomLane => "RandomLane",
+            _                                     => "Wandering",
+        };
     }
 }

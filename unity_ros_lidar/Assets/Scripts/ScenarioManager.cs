@@ -161,14 +161,12 @@ public class ScenarioManager : MonoBehaviour
             agent.startleRadius  = config.startleRadius;
             agent.reactionBias   = config.reactionBias;
             agent.egoVehicles    = egoVehicles;
-            agent.patrolWaypoints = entryWaypoints;
         }
 
         ErraticVehicle vehicle = go.GetComponent<ErraticVehicle>();
         if (vehicle != null)
         {
-            vehicle.airplane        = egoVehicles != null && egoVehicles.Length > 0 ? egoVehicles[0] : null;
-            vehicle.patrolWaypoints = entryWaypoints;
+            vehicle.airplane = egoVehicles != null && egoVehicles.Length > 0 ? egoVehicles[0] : null;
             vehicle.Initialize();
         }
 
@@ -193,15 +191,8 @@ public class ScenarioManager : MonoBehaviour
 
         if (all.Count == 0) return;
 
-        Transform[] combined = all.ToArray();
-        foreach (GameObject go in m_SpawnedAgents)
-        {
-            ErraticAgent agent = go != null ? go.GetComponent<ErraticAgent>() : null;
-            if (agent != null)
-                agent.emergencyVehicles = combined;
-        }
-
-        Debug.Log($"[ScenarioManager] Wired {combined.Length} emergency vehicle(s) onto agents.");
+        // emergencyVehicles wiring removed — ErraticAgent no longer has that field.
+        Debug.Log($"[ScenarioManager] Found {all.Count} emergency vehicle(s) (wiring skipped — use ApronTrafficManager).");
     }
 
     // Returns the waypoints assigned to a given entry label, or null if none defined.

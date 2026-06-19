@@ -59,8 +59,7 @@ public class StreetCrossingZone : MonoBehaviour
 
             if (Random.value > crossProbability) continue;
 
-            Debug.Log($"{agent} is goint to the target position");
-            agent.TriggerCrossing(crossTarget.position);
+            // TriggerCrossing removed — ErraticAgent no longer has a Crossing state.
         }
 
         // TEMP diagnostic — how many agents exist and how many are inside the box

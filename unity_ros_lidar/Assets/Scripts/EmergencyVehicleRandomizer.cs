@@ -53,7 +53,6 @@ public class EmergencyVehicleRandomizer : EpisodeRandomizer
             ErraticVehicle ev = go.GetComponent<ErraticVehicle>();
             if (ev != null)
             {
-                ev.patrolWaypoints = patrolWaypoints;
                 ev.airplane = manager.egoVehicles != null && manager.egoVehicles.Length > 0
                     ? manager.egoVehicles[0] : null;
             }
@@ -62,14 +61,7 @@ public class EmergencyVehicleRandomizer : EpisodeRandomizer
             spawnedTransforms.Add(go.transform);
         }
 
-        // Wire spawned vehicles onto every agent as emergency triggers
-        foreach (GameObject agentGO in manager.SpawnedAgents)
-        {
-            ErraticAgent agent = agentGO.GetComponent<ErraticAgent>();
-            if (agent != null)
-                agent.emergencyVehicles = spawnedTransforms.ToArray();
-        }
-
+        // emergencyVehicles wiring removed — ErraticAgent no longer has that field.
         Debug.Log($"[EmergencyVehicleRandomizer] Spawned {count} emergency vehicle(s).");
     }
 

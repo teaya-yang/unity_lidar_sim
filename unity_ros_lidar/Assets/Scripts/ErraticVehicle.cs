@@ -1,30 +1,66 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Stochastic vehicle movement without NavMesh — picks random waypoints, occasionally
-/// stops, and reacts when the airplane enters reactionRadius (pull over or rush).
-/// Attach to the ambulance prefab instead of AmbulanceTrajectorySubscriber for
-/// fully autonomous, ROS-free behavior.
-/// </summary>
-public class ErraticVehicle : MonoBehaviour
+// Ground vehicle NPC — stochastic movement along the TaxiwayLane graph.
+// Implements IApronNpc so ApronTrafficManager can spawn, cull, and despawn it.
+//
+// Routing modes (set before OnApronInitialize / Initialize is called):
+//   fixedRoute != null  → follows the ordered lane sequence, then continues randomly
+//   fixedRoute == null  → picks a random NextLane at every junction
+//
+// Reacts to the ego aircraft: pulls over or rushes depending on pullOverOnReaction.
+public class ErraticVehicle : MonoBehaviour, IApronNpc
 {
     static readonly List<ErraticVehicle> s_All = new();
 
     void OnEnable()  => s_All.Add(this);
     void OnDisable() => s_All.Remove(this);
 
-    [Header("Patrol Route")]
-    [Tooltip("Assign street waypoints for a predictable route. Leave empty for random wandering.")]
-    public Transform[] patrolWaypoints;
-    public bool loopPatrol = true;
+    // ── IApronNpc ─────────────────────────────────────────────────────────────
+
+    public bool ShouldDespawn => _shouldDespawn;
+
+    public Bounds Bounds
+    {
+        get
+        {
+            Renderer[] rs = GetComponentsInChildren<Renderer>();
+            if (rs.Length == 0) return new Bounds(Vector3.zero, Vector3.one * 2f);
+            Bounds b = rs[0].bounds;
+            for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+            return new Bounds(Vector3.zero, b.size);
+        }
+    }
+
+    public void OnApronInitialize(TaxiwayLane startLane, Transform[] egoVehicles)
+    {
+        _currentLane = startLane;
+        airplane     = egoVehicles != null && egoVehicles.Length > 0 ? egoVehicles[0] : null;
+        Initialize();
+    }
+
+    // ── Routing mode (readable in Inspector at runtime and by GroundTruthPublisher) ──
+
+    public enum RoutingMode { Wandering, RandomLane, FixedRoute }
+
+    public RoutingMode CurrentRoutingMode =>
+        _currentLane == null ? RoutingMode.Wandering :
+        fixedRoute   != null ? RoutingMode.FixedRoute :
+                               RoutingMode.RandomLane;
+
+    public bool   IsReacting  => _reacting;
+    public bool   IsStopped   => _stopped;
+    public string CurrentLaneName => _currentLane != null ? _currentLane.name : "none";
+    public int    WaypointIndex   => _waypointIndex;
+
+    // ── Inspector ─────────────────────────────────────────────────────────────
 
     [Header("Movement")]
-    public float minSpeed               = 4f;
-    public float maxSpeed               = 12f;
-    public float rotationSpeed          = 3f;
+    public float minSpeed                = 4f;
+    public float maxSpeed                = 12f;
+    public float rotationSpeed           = 3f;
     public float waypointReachedDistance = 2f;
-    public float wanderRadius           = 60f;
+    public float wanderRadius            = 60f;
 
     [Header("Micro-stops")]
     [Range(0f, 1f)] public float stopProbabilityPerSecond = 0.04f;
@@ -35,95 +71,181 @@ public class ErraticVehicle : MonoBehaviour
     public float separationRadius   = 6f;
     public float separationStrength = 3f;
 
-    [Header("Airplane reaction")]
+    [Header("Ego reaction")]
     public Transform airplane;
     public float reactionRadius = 30f;
-    [Tooltip("True = pull over and stop; False = rush (speed boost)")]
+    [Tooltip("True = pull over and stop when ego approaches; False = rush (speed boost).")]
     public bool pullOverOnReaction = true;
 
-    float   m_Speed;
-    Vector3 m_Target;
-    float   m_StopTimer;
-    bool    m_Stopped;
-    bool    m_Reacting;
-    int     m_PatrolIndex;
-    int     m_PatrolDir = 1;
-    Vector3 m_LastPos;
-    bool    m_HasLastPos;
-    bool    m_Initialized;
+    // Set by RouteApronSimulator before Initialize() — vehicle follows this lane
+    // sequence then continues randomly from the last lane's NextLanes.
+    [HideInInspector] public TaxiwayLane[] fixedRoute;
 
-    // Called by ScenarioManager immediately after assigning patrolWaypoints so the
-    // vehicle is ready regardless of when Unity calls Start().
-    public void Initialize()
-    {
-        m_Initialized  = true;
-        m_Speed        = Random.Range(minSpeed, maxSpeed);
-        m_Stopped      = false;
-        m_Reacting     = false;
-        m_HasLastPos   = false;
-        m_PatrolIndex  = 0;
-        m_PatrolDir    = 1;
+    // ── Runtime state ─────────────────────────────────────────────────────────
 
-        if (patrolWaypoints != null && patrolWaypoints.Length > 0)
-            m_Target = patrolWaypoints[0].position;
-        else
-            PickWaypoint();
-    }
+    float       _speed;
+    Vector3     _target;
+    float       _stopTimer;
+    bool        _stopped;
+    bool        _reacting;
+    bool        _initialized;
+    bool        _shouldDespawn;
+
+    TaxiwayLane _currentLane;
+    int         _waypointIndex;
+    int         _routeIndex;
+
+    Vector3 _lastPos;
+    bool    _hasLastPos;
+
+    // ── Unity messages ────────────────────────────────────────────────────────
 
     void Start()
     {
-        if (!m_Initialized)
-            Initialize();
+        if (!_initialized) Initialize();
     }
 
     void Update()
     {
         CheckAirplaneReaction();
 
-        if (m_Stopped)
+        if (_stopped)
         {
-            m_StopTimer -= Time.deltaTime;
-            if (m_StopTimer <= 0f) ExitStop();
+            // While stopped at a holding position, stay stopped as long as ego is near.
+            if (_currentLane != null && _currentLane.IsHoldingPosition && IsEgoNearby())
+                return;
+
+            _stopTimer -= Time.deltaTime;
+            if (_stopTimer <= 0f) ExitStop();
             return;
         }
 
-        // TEMP: if we got moved since our last frame by more than we could have stepped,
-        // another component (or a respawn) is also writing this transform.
-        if (m_HasLastPos)
+        if (_hasLastPos)
         {
-            float jump = Vector3.Distance(transform.position, m_LastPos);
+            float jump = Vector3.Distance(transform.position, _lastPos);
             if (jump > maxSpeed * Time.deltaTime + 1f)
-                Debug.LogWarning($"[ErraticVehicle] '{name}' moved {jump:F1} m between frames " +
-                                 "— another component is also moving this object (or it respawned).", this);
+                Debug.LogWarning($"[ErraticVehicle] '{name}' jumped {jump:F1} m between frames — " +
+                                 "another component may also be moving this object.", this);
         }
 
         MoveTowardTarget();
 
-        if (Vector3.Distance(transform.position, m_Target) < waypointReachedDistance)
-            AdvanceTarget();
+        if (Vector3.Distance(transform.position, _target) < waypointReachedDistance)
+            AdvanceWaypoint();
 
-        m_LastPos = transform.position;
-        m_HasLastPos = true;
+        _lastPos    = transform.position;
+        _hasLastPos = true;
 
-        if (!m_Reacting && Roll(stopProbabilityPerSecond))
-            EnterStop();
+        if (!_reacting && Roll(stopProbabilityPerSecond)) EnterStop();
     }
+
+    // ── Initialization ────────────────────────────────────────────────────────
+
+    public void Initialize()
+    {
+        _initialized   = true;
+        _shouldDespawn = false;
+        _speed         = Random.Range(minSpeed, maxSpeed);
+        _stopped       = false;
+        _reacting      = false;
+        _hasLastPos    = false;
+        _routeIndex    = 0;
+        _waypointIndex = 0;
+
+        if (_currentLane != null)
+            EnterLane(_currentLane);
+        else
+            PickWanderTarget();
+    }
+
+    // ── Lane graph traversal ──────────────────────────────────────────────────
+
+    void EnterLane(TaxiwayLane lane)
+    {
+        _currentLane   = lane;
+        _waypointIndex = 0;
+        _speed         = Mathf.Min(Random.Range(minSpeed, maxSpeed), lane.SpeedLimit);
+
+        if (lane.Waypoints != null && lane.Waypoints.Length > 0)
+            _target = lane.Waypoints[0];
+    }
+
+    void AdvanceWaypoint()
+    {
+        if (_currentLane == null || _currentLane.Waypoints == null)
+        {
+            PickWanderTarget();
+            return;
+        }
+
+        _waypointIndex++;
+
+        if (_waypointIndex < _currentLane.Waypoints.Length)
+        {
+            _target = _currentLane.Waypoints[_waypointIndex];
+            return;
+        }
+
+        OnLaneComplete();
+    }
+
+    void OnLaneComplete()
+    {
+        // Block at holding positions (runway crossings, give-way) until ego clears.
+        if (_currentLane != null && _currentLane.IsHoldingPosition && IsEgoNearby())
+        {
+            EnterStop(float.MaxValue);
+            return;
+        }
+
+        TaxiwayLane next = PickNextLane();
+        if (next != null)
+            EnterLane(next);
+        else
+            EnterStop(maxStopDuration); // dead-end: pull over
+    }
+
+    TaxiwayLane PickNextLane()
+    {
+        // Fixed route still has lanes ahead — follow them before going random.
+        if (fixedRoute != null && _routeIndex + 1 < fixedRoute.Length)
+        {
+            _routeIndex++;
+            return fixedRoute[_routeIndex];
+        }
+
+        // Random traversal: pick any outgoing lane.
+        if (_currentLane != null &&
+            _currentLane.NextLanes != null &&
+            _currentLane.NextLanes.Count > 0)
+            return _currentLane.NextLanes[Random.Range(0, _currentLane.NextLanes.Count)];
+
+        return null;
+    }
+
+    void PickWanderTarget()
+    {
+        Vector2 disk = Random.insideUnitCircle * wanderRadius;
+        _target = transform.position + new Vector3(disk.x, 0f, disk.y);
+    }
+
+    // ── Movement ──────────────────────────────────────────────────────────────
 
     void MoveTowardTarget()
     {
-        Vector3 dir = m_Target - transform.position;
+        Vector3 dir = _target - transform.position;
         dir.y = 0f;
         if (dir.sqrMagnitude < 0.001f) return;
         dir.Normalize();
 
-        // model's visual front is -Z, so face -dir toward the target
+        // Model's visual front is -Z.
         Quaternion look = Quaternion.LookRotation(-dir);
         transform.rotation = Quaternion.RotateTowards(
             transform.rotation, look, rotationSpeed * 60f * Time.deltaTime);
 
         Vector3 heading = -transform.forward;
         float alignment = Mathf.Clamp01(Vector3.Dot(heading, dir));
-        Vector3 move = heading * (m_Speed * alignment) + Separation();
+        Vector3 move    = heading * (_speed * alignment) + Separation();
         move.y = 0f;
         transform.position += move * Time.deltaTime;
     }
@@ -143,80 +265,90 @@ public class ErraticVehicle : MonoBehaviour
         return offset * separationStrength;
     }
 
+    // ── Ego reaction ──────────────────────────────────────────────────────────
+
     void CheckAirplaneReaction()
     {
         if (airplane == null) return;
         bool inRange = Vector3.Distance(transform.position, airplane.position) < reactionRadius;
 
-        if (inRange && !m_Reacting)
+        if (inRange && !_reacting)
         {
-            m_Reacting = true;
+            _reacting = true;
             if (pullOverOnReaction)
                 EnterStop(maxStopDuration * 2f);
             else
-                m_Speed = maxSpeed * 1.5f;
+                _speed = maxSpeed * 1.5f;
         }
 
-        if (!inRange && m_Reacting)
+        if (!inRange && _reacting)
         {
-            m_Reacting = false;
-            m_Speed = Random.Range(minSpeed, maxSpeed);
+            _reacting = false;
+            _speed    = Random.Range(minSpeed, maxSpeed);
         }
     }
 
+    bool IsEgoNearby() =>
+        airplane != null && Vector3.Distance(transform.position, airplane.position) < reactionRadius;
+
+    // ── Micro-stops ───────────────────────────────────────────────────────────
+
     void EnterStop(float duration = -1f)
     {
-        m_Stopped   = true;
-        m_StopTimer = duration > 0f ? duration : Random.Range(minStopDuration, maxStopDuration);
+        _stopped   = true;
+        _stopTimer = duration > 0f ? duration : Random.Range(minStopDuration, maxStopDuration);
     }
 
     void ExitStop()
     {
-        m_Stopped = false;
-        m_Speed   = Random.Range(minSpeed, maxSpeed);
-        AdvanceTarget();
-    }
+        _stopped = false;
+        _speed   = Random.Range(minSpeed, maxSpeed);
 
-    void AdvanceTarget()
-    {
-        if (patrolWaypoints != null && patrolWaypoints.Length > 0)
-        {
-            if (loopPatrol)
-            {
-                m_PatrolIndex = (m_PatrolIndex + 1) % patrolWaypoints.Length;
-            }
-            else
-            {
-                m_PatrolIndex += m_PatrolDir;
-                if (m_PatrolIndex >= patrolWaypoints.Length - 1 || m_PatrolIndex <= 0)
-                    m_PatrolDir *= -1;
-            }
-            Transform wp = patrolWaypoints[m_PatrolIndex];
-            if (wp != null) m_Target = wp.position;
-        }
+        // If we were holding at the end of a lane, proceed to the next.
+        if (_currentLane != null && _waypointIndex >= _currentLane.Waypoints.Length)
+            OnLaneComplete();
         else
-        {
-            PickWaypoint();
-        }
-    }
-
-    void PickWaypoint()
-    {
-        Vector2 disk = Random.insideUnitCircle * wanderRadius;
-        m_Target = transform.position + new Vector3(disk.x, 0f, disk.y);
+            AdvanceWaypoint();
     }
 
     bool Roll(float probabilityPerSecond) =>
         Random.value < probabilityPerSecond * Time.deltaTime;
 
+    // ── Gizmos ────────────────────────────────────────────────────────────────
+
     void OnDrawGizmosSelected()
     {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, wanderRadius);
+        // Reaction radius
         if (airplane != null)
         {
             Gizmos.color = Color.cyan;
             Gizmos.DrawWireSphere(transform.position, reactionRadius);
         }
+
+        if (!Application.isPlaying) return;
+
+        // Current target — red line from vehicle to next waypoint
+        Gizmos.color = Color.red;
+        Gizmos.DrawLine(transform.position, _target);
+        Gizmos.DrawSphere(_target, 0.4f);
+
+        // Draw remaining waypoints in the current lane
+        if (_currentLane != null && _currentLane.Waypoints != null)
+        {
+            Gizmos.color = CurrentRoutingMode == RoutingMode.FixedRoute
+                ? Color.cyan : Color.yellow;
+
+            for (int i = _waypointIndex; i < _currentLane.Waypoints.Length - 1; i++)
+                Gizmos.DrawLine(_currentLane.Waypoints[i], _currentLane.Waypoints[i + 1]);
+        }
+
+        // Routing mode label above vehicle
+#if UNITY_EDITOR
+        UnityEditor.Handles.Label(
+            transform.position + Vector3.up * 2f,
+            $"{CurrentRoutingMode}  lane:{CurrentLaneName}  wp:{_waypointIndex}" +
+            (_stopped ? "  [STOPPED]" : "") + (_reacting ? "  [REACTING]" : ""),
+            new GUIStyle { normal = { textColor = Color.white }, fontSize = 11 });
+#endif
     }
 }
