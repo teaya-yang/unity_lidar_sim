@@ -581,7 +581,7 @@ MonoBehaviour:
   m_OverrideVoxelSize: 0
   m_VoxelSize: 0.16666667
   m_MinRegionArea: 2
-  m_NavMeshData: {fileID: 23800000, guid: 94dae26b841dec8b483d21b92986a776, type: 2}
+  m_NavMeshData: {fileID: 23800000, guid: a4a76d5eef0c8104ab5a694e073ae97e, type: 2}
   m_BuildHeightMesh: 0
 --- !u!1 &797209698
 GameObject:
@@ -915,17 +915,17 @@ MonoBehaviour:
     spawnableLanes: []
     spawnCountLimit: 2
   _routeSims:
-  - enabled: 1
+  - enabled: 0
     prefabs:
     - {fileID: 403517184}
     route:
     - {fileID: 2140373769}
     spawnCountLimit: 2
   _navMeshSims:
-  - enabled: 0
+  - enabled: 1
     prefabs:
     - {fileID: 403517184}
-    spawnCenter: {x: 0, y: 0, z: 0}
+    spawnCenter: {x: 50, y: 0, z: 0}
     spawnRadius: 0
     spawnCountLimit: 0
     patrolLane: {fileID: 2140373769}

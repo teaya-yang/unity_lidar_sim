@@ -4,12 +4,6 @@ using UnityEngine;
 // Top-level traffic orchestrator — replaces ScenarioManager + EpisodeSweepRunner.
 // Attach one instance to a scene GameObject. Wire ego vehicles, then populate
 // randomSims / routeSims / navMeshSims in the Inspector.
-//
-// Lifecycle mirrors AWSIM's TrafficSimulator:
-//   Start()        → Initialize(seed)
-//   FixedUpdate()  → ManageSpawning() + Despawn()
-//   Update()       → Cull() at cullingHz
-//   Restart(seed)  → tear down + re-initialize (replaces EpisodeSweepRunner reset)
 public class ApronTrafficManager : MonoBehaviour
 {
     [Header("Ego")]
