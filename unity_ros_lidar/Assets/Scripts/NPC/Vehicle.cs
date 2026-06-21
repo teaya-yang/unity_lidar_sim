@@ -36,6 +36,8 @@ public class Vehicle : MonoBehaviour, INpc
     // 'radius' (m) of 'junctionPoint'. Used for intersection right-of-way: a give-way vehicle
     // holds while a priority lane is occupied near the junction. The radius bounds the conflict
     // so a vehicle far down a long priority lane doesn't block entry indefinitely.
+    // The ego (EgoRouteFollower) is included so NPCs treat it as a full intersection participant:
+    // an NPC on a give-way lane yields to the ego when the ego occupies one of its priority lanes.
     public static bool AnyVehicleNearOnLanes(List<TaxiwayLane> lanes, Vector3 junctionPoint, float radius, Vehicle except)
     {
         if (lanes == null || lanes.Count == 0) return false;
@@ -46,6 +48,17 @@ public class Vehicle : MonoBehaviour, INpc
             if (v == null || v == except || v._currentLane == null) continue;
             if (!lanes.Contains(v._currentLane)) continue;
             Vector3 d = v.transform.position - junctionPoint;
+            d.y = 0f;
+            if (d.sqrMagnitude <= r2) return true;
+        }
+
+        // Ego: only counts when it's on one of the priority lanes (so an NPC yields to the ego),
+        // never when the ego is itself on the give-way lane — that case is handled by the ego's
+        // own ShouldYieldAtJunction, and NPCs must not stop for an ego that is yielding to them.
+        EgoRouteFollower ego = EgoRouteFollower.Instance;
+        if (ego != null && ego.CurrentLane != null && lanes.Contains(ego.CurrentLane))
+        {
+            Vector3 d = ego.transform.position - junctionPoint;
             d.y = 0f;
             if (d.sqrMagnitude <= r2) return true;
         }
@@ -99,14 +112,17 @@ public class Vehicle : MonoBehaviour, INpc
     public float waypointReachedDistance = 2f;
     public float wanderRadius            = 60f;
 
+    [Tooltip("Tick if the model's visual front points down -Z (like the ambulance). " +
+             "Untick for models whose front is +Z (they'd otherwise drive backwards).")]
+    public bool frontIsNegativeZ = true;
+
     [Tooltip("When the vehicle reaches the end of its route (no further lane), despawn it instead " +
              "of pulling over — prevents vehicles stacking on the final waypoint. Untick to keep " +
              "the old pull-over-and-wait behaviour.")]
     public bool despawnAtRouteEnd = true;
 
-    [Header("Micro-stops")]
-    [Range(0f, 1f)] public float stopProbabilityPerSecond = 0.04f;
-    public float minStopDuration = 1f;
+    [Header("Stop durations")]
+    [Tooltip("How long the vehicle waits when pulling over at a dead-end (s).")]
     public float maxStopDuration = 5f;
 
     [Header("Separation")]
@@ -204,8 +220,6 @@ public class Vehicle : MonoBehaviour, INpc
 
         _lastPos    = transform.position;
         _hasLastPos = true;
-
-        if (Roll(stopProbabilityPerSecond)) EnterStop();
     }
 
     // ── Initialization ────────────────────────────────────────────────────────
@@ -333,12 +347,14 @@ public class Vehicle : MonoBehaviour, INpc
         if (dir.sqrMagnitude < 0.001f) return;
         dir.Normalize();
 
-        // Model's visual front is -Z.
-        Quaternion look = Quaternion.LookRotation(-dir);
+        // The model's forward axis depends on how the mesh was authored. The ambulance's visual
+        // front is -Z; other prefabs may face +Z. frontIsNegativeZ selects which.
+        Vector3    faceDir = frontIsNegativeZ ? -dir : dir;
+        Quaternion look    = Quaternion.LookRotation(faceDir);
         transform.rotation = Quaternion.RotateTowards(
             transform.rotation, look, rotationSpeed * 60f * Time.deltaTime);
 
-        Vector3 heading = -transform.forward;
+        Vector3 heading = frontIsNegativeZ ? -transform.forward : transform.forward;
         float alignment = Mathf.Clamp01(Vector3.Dot(heading, dir));
 
         // Car-following: slow (or stop) for the nearest vehicle ahead in our lane corridor.
@@ -419,7 +435,7 @@ public class Vehicle : MonoBehaviour, INpc
     void EnterStop(float duration = -1f)
     {
         _stopped   = true;
-        _stopTimer = duration > 0f ? duration : Random.Range(minStopDuration, maxStopDuration);
+        _stopTimer = duration > 0f ? duration : maxStopDuration;
     }
 
     void ExitStop()
@@ -427,15 +443,13 @@ public class Vehicle : MonoBehaviour, INpc
         _stopped = false;
         _speed   = Random.Range(minSpeed, maxSpeed);
 
-        // If we were holding at the end of a lane, proceed to the next.
+        // If we were holding at the very end of a lane, proceed to the next lane.
+        // Otherwise this was a mid-lane micro-stop: simply resume toward the CURRENT target.
+        // (Calling AdvanceWaypoint here would skip the current waypoint, and repeated micro-stops
+        //  would race a vehicle through the whole lane and despawn it before it reached the end.)
         if (_currentLane != null && _waypointIndex >= _currentLane.Waypoints.Length)
             OnLaneComplete();
-        else
-            AdvanceWaypoint();
     }
-
-    bool Roll(float probabilityPerSecond) =>
-        Random.value < probabilityPerSecond * Time.deltaTime;
 
     // ── Gizmos ────────────────────────────────────────────────────────────────
 

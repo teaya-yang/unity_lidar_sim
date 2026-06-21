@@ -103,6 +103,10 @@ public class EgoRouteFollower : MonoBehaviour
     public int   WaypointIndex => _waypointIndex;
     public string CurrentLaneName => _currentLane != null ? _currentLane.name : "none";
 
+    // The lane the ego is currently traversing. Read by Vehicle.AnyVehicleNearOnLanes so NPCs
+    // treat the ego as a full intersection participant (yield to it on priority lanes).
+    public TaxiwayLane CurrentLane => _currentLane;
+
     public void Restart()
     {
         _laneIndex     = 0;

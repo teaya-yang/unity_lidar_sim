@@ -459,6 +459,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 400008}
+  - component: {fileID: -4440009511693088629}
+  - component: {fileID: -5102940084104385477}
   m_Layer: 0
   m_Name: Vehicle_Bus_color03_separate
   m_TagString: Untagged
@@ -486,3 +488,55 @@ Transform:
   - {fileID: 400000}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!64 &-4440009511693088629
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100010}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 0}
+--- !u!114 &-5102940084104385477
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6680789e3f721232b9c4c229c25a9316, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Vehicle
+  minSpeed: 4
+  maxSpeed: 12
+  rotationSpeed: 3
+  waypointReachedDistance: 2
+  wanderRadius: 60
+  despawnAtRouteEnd: 1
+  stopProbabilityPerSecond: 0.04
+  minStopDuration: 1
+  maxStopDuration: 5
+  separationRadius: 6
+  separationStrength: 3
+  followDistance: 12
+  stopDistance: 4
+  laneHalfWidth: 3
+  airplane: {fileID: 0}
+  reactionRadius: 30
+  junctionConflictRadius: 20
+  fixedRoute: []
