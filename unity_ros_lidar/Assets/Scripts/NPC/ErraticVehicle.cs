@@ -71,6 +71,15 @@ public class ErraticVehicle : MonoBehaviour, INpc
     public float separationRadius   = 6f;
     public float separationStrength = 3f;
 
+    [Header("Car-following")]
+    [Tooltip("Gap (m) to the vehicle ahead at which this vehicle begins slowing.")]
+    public float followDistance = 12f;
+    [Tooltip("Gap (m) to the vehicle ahead at which this vehicle comes to a full stop.")]
+    public float stopDistance = 4f;
+    [Tooltip("Half-width (m) of the corridor ahead used to decide whether another vehicle " +
+             "counts as 'in my lane'. Wider = vehicles queue from farther to the side.")]
+    public float laneHalfWidth = 3f;
+
     [Header("Ego reaction")]
     public Transform airplane;
     public float reactionRadius = 30f;
@@ -97,6 +106,9 @@ public class ErraticVehicle : MonoBehaviour, INpc
 
     Vector3 _lastPos;
     bool    _hasLastPos;
+
+    float   _lastGap = float.PositiveInfinity; // gap to leader last frame, for gizmo/state
+    public bool IsFollowing => _lastGap < followDistance;
 
     // ── Unity messages ────────────────────────────────────────────────────────
 
@@ -245,12 +257,57 @@ public class ErraticVehicle : MonoBehaviour, INpc
 
         Vector3 heading = -transform.forward;
         float alignment = Mathf.Clamp01(Vector3.Dot(heading, dir));
-        Vector3 move    = heading * (_speed * alignment) + Separation();
+
+        // Car-following: slow (or stop) for the nearest vehicle ahead in our lane corridor.
+        // Travel direction is the desired direction toward the target (dir), so "ahead"
+        // means farther along the path — this is what enforces queue order.
+        _lastGap = GapToLeader(dir);
+        float followFactor = FollowSpeedFactor(_lastGap);
+
+        // Forward motion is scaled by followFactor: at stopDistance it is 0, so the follower
+        // physically cannot advance past the leader. Separation is lateral-only, so it never
+        // shoves a vehicle forward/backward (the old omnidirectional force caused overtaking).
+        Vector3 move = heading * (_speed * alignment * followFactor) + LateralSeparation(dir);
         move.y = 0f;
         transform.position += move * Time.deltaTime;
     }
 
-    Vector3 Separation()
+    // Longitudinal gap (m) to the nearest vehicle ahead within the lane corridor, or
+    // +infinity if the path ahead is clear. "Ahead" = positive projection onto travelDir;
+    // "in corridor" = lateral offset from the travel axis below laneHalfWidth.
+    float GapToLeader(Vector3 travelDir)
+    {
+        float best = float.PositiveInfinity;
+        foreach (ErraticVehicle other in s_All)
+        {
+            if (other == this) continue;
+            Vector3 toOther = other.transform.position - transform.position;
+            toOther.y = 0f;
+
+            float ahead = Vector3.Dot(toOther, travelDir);   // longitudinal distance
+            if (ahead <= 0f) continue;                       // behind us — not a leader
+
+            float lateral = (toOther - travelDir * ahead).magnitude;
+            if (lateral > laneHalfWidth) continue;           // beside us, not in our lane
+
+            if (ahead < best) best = ahead;
+        }
+        return best;
+    }
+
+    // Linear speed ramp from car-following: full speed beyond followDistance, zero at or
+    // below stopDistance, linearly interpolated in between (a simplified IDM gap policy).
+    float FollowSpeedFactor(float gap)
+    {
+        if (gap >= followDistance) return 1f;
+        if (gap <= stopDistance)   return 0f;
+        return (gap - stopDistance) / Mathf.Max(followDistance - stopDistance, 0.001f);
+    }
+
+    // Lane-aware separation: keeps only the component perpendicular to the travel axis, so
+    // crowded vehicles nudge sideways without pushing each other along the lane (which would
+    // let a follower slip past its leader). Returns a velocity offset in world space.
+    Vector3 LateralSeparation(Vector3 travelDir)
     {
         Vector3 offset = Vector3.zero;
         foreach (ErraticVehicle other in s_All)
@@ -259,8 +316,12 @@ public class ErraticVehicle : MonoBehaviour, INpc
             Vector3 diff = transform.position - other.transform.position;
             diff.y = 0f;
             float dist = diff.magnitude;
-            if (dist < separationRadius && dist > 0.001f)
-                offset += diff.normalized * ((separationRadius - dist) / separationRadius);
+            if (dist >= separationRadius || dist <= 0.001f) continue;
+
+            // Project out the longitudinal part, keep the lateral (perpendicular) push.
+            Vector3 lateral = diff - travelDir * Vector3.Dot(diff, travelDir);
+            if (lateral.sqrMagnitude < 0.0001f) continue;    // directly in line — no sideways push
+            offset += lateral.normalized * ((separationRadius - dist) / separationRadius);
         }
         return offset * separationStrength;
     }
@@ -347,7 +408,8 @@ public class ErraticVehicle : MonoBehaviour, INpc
         UnityEditor.Handles.Label(
             transform.position + Vector3.up * 2f,
             $"{CurrentRoutingMode}  lane:{CurrentLaneName}  wp:{_waypointIndex}" +
-            (_stopped ? "  [STOPPED]" : "") + (_reacting ? "  [REACTING]" : ""),
+            (_stopped ? "  [STOPPED]" : "") + (_reacting ? "  [REACTING]" : "") +
+            (IsFollowing ? $"  [FOLLOWING gap:{_lastGap:F1}m]" : ""),
             new GUIStyle { normal = { textColor = Color.white }, fontSize = 11 });
 #endif
     }

@@ -1072,23 +1072,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6680789e3f721232b9c4c229c25a9316, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ErraticVehicle
-  patrolWaypoints: []
-  loopPatrol: 1
   minSpeed: 4
   maxSpeed: 12
   rotationSpeed: 3
   waypointReachedDistance: 2
   wanderRadius: 40
-  stopProbabilityPerSecond: 0.04
+  stopProbabilityPerSecond: 0
   minStopDuration: 1
   maxStopDuration: 5
   separationRadius: 1
   separationStrength: 0.5
-  agentAvoidanceRadius: 0.5
-  agentAvoidanceStrength: 0
+  followDistance: 12
+  stopDistance: 4
+  laneHalfWidth: 3
   airplane: {fileID: 0}
   reactionRadius: 30
   pullOverOnReaction: 1
+  fixedRoute: []
 --- !u!65 &1143836346744944922
 BoxCollider:
   m_ObjectHideFlags: 0

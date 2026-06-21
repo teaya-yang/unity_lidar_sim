@@ -907,7 +907,7 @@ MonoBehaviour:
   _seed: 0
   _maxNpcCount: 40
   _spawnDistanceToEgo: 0
-  _cullingDistance: 100
+  _cullingDistance: 10000
   _cullingHz: 2
   _randomSims:
   - enabled: 0
@@ -915,16 +915,23 @@ MonoBehaviour:
     - {fileID: 1181029763419816, guid: e88383b28fa9049408fb72235350effe, type: 3}
     spawnableLanes:
     - {fileID: 2140373769}
-    spawnCountLimit: 2
+    spawnCountLimit: 1
   _routeSims:
   - enabled: 1
     prefabs:
     - {fileID: 1181029763419816, guid: e88383b28fa9049408fb72235350effe, type: 3}
     route:
     - {fileID: 2140373769}
+    - {fileID: 1623606611}
     spawnCountLimit: 2
     egoExclusionRadius: 0
-  _navMeshSims: []
+  _navMeshSims:
+  - enabled: 0
+    prefabs: []
+    spawnCenter: {x: 0, y: 0, z: 0}
+    spawnRadius: 0
+    spawnCountLimit: 0
+    patrolLane: {fileID: 0}
 --- !u!4 &1230578708
 Transform:
   m_ObjectHideFlags: 0
@@ -1009,6 +1016,108 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1533182843
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1533182845}
+  - component: {fileID: 1533182844}
+  m_Layer: 0
+  m_Name: TaxiLane (2)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1533182844
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1533182843}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d1329deb064dc0ac69fea1c666a32c0b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TaxiwayLane
+  _waypoints:
+  - {x: -73.46893, y: 0, z: 176.53194}
+  - {x: -372.14517, y: 0, z: 178.33754}
+  _nextLanes: []
+  _prevLanes: []
+  _speedLimit: 5
+  _isHoldingPosition: 0
+--- !u!4 &1533182845
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1533182843}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 162.9, y: 0, z: 84.7}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1623606610
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1623606612}
+  - component: {fileID: 1623606611}
+  m_Layer: 0
+  m_Name: TaxiLane (1)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1623606611
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1623606610}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d1329deb064dc0ac69fea1c666a32c0b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TaxiwayLane
+  _waypoints:
+  - {x: 7.728016, y: 0, z: 169.41667}
+  - {x: 343.13986, y: 0, z: 172.02086}
+  _nextLanes: []
+  _prevLanes: []
+  _speedLimit: 5
+  _isHoldingPosition: 0
+--- !u!4 &1623606612
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1623606610}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 58.3, y: 0, z: 80.7}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1575,11 +1684,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TaxiwayLane
   _waypoints:
   - {x: -27.862963, y: 0, z: 39.81813}
-  - {x: -27.694584, y: 0, z: 64.502045}
-  - {x: 4.489896, y: 0, z: 64.3496}
-  - {x: 3.5292854, y: 0, z: 90.47873}
-  - {x: 40.44227, y: 0, z: 90.809494}
-  _nextLanes: []
+  - {x: -26.93386, y: 0, z: 169.25479}
+  _nextLanes:
+  - {fileID: 1533182844}
   _prevLanes: []
   _speedLimit: 5
   _isHoldingPosition: 0
@@ -1592,7 +1699,7 @@ Transform:
   m_GameObject: {fileID: 2140373768}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.1, y: 0, z: 52.4}
+  m_LocalPosition: {x: -11.3, y: 0, z: 51.8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1612,3 +1719,5 @@ SceneRoots:
   - {fileID: 517348865}
   - {fileID: 1230578708}
   - {fileID: 2140373770}
+  - {fileID: 1623606612}
+  - {fileID: 1533182845}

@@ -3,7 +3,7 @@ using UnityEngine.AI;
 
 // NavMesh-based NPC pedestrian / ground crew.
 // Mirrors AWSIM's NPC pattern: follows a lane's waypoints, pauses randomly,
-// and reacts to the ego aircraft.  All random wandering has been removed.
+// and reacts to the ego aircraft.
 // Implements INpc so TrafficManager can spawn and wire it.
 [RequireComponent(typeof(NavMeshAgent))]
 public class ErraticAgent : MonoBehaviour, INpc
@@ -31,8 +31,6 @@ public class ErraticAgent : MonoBehaviour, INpc
     public float reactionBias = 1f;
     public float reactionSpeedMultiplier = 2f;
 
-    // ── INpc ─────────────────────────────────────────────────────────────
-
     public bool ShouldDespawn => false;
 
     public Bounds Bounds
@@ -59,8 +57,6 @@ public class ErraticAgent : MonoBehaviour, INpc
     // True when a patrol path is available — used by GroundTruthPublisher.
     public bool HasPatrolPath => _laneWaypoints != null && _laneWaypoints.Length > 0;
 
-    // ── Runtime state ─────────────────────────────────────────────────────────
-
     NavMeshAgent _nav;
     Vector3[]    _laneWaypoints;
     int          _waypointIndex;
@@ -69,8 +65,6 @@ public class ErraticAgent : MonoBehaviour, INpc
 
     enum State { Patrolling, Paused, Reacting }
     State _state = State.Patrolling;
-
-    // ── Unity messages ────────────────────────────────────────────────────────
 
     void Start()
     {
@@ -95,8 +89,6 @@ public class ErraticAgent : MonoBehaviour, INpc
             case State.Reacting:   UpdateReacting();   break;
         }
     }
-
-    // ── Patrol ────────────────────────────────────────────────────────────────
 
     void EnterPatrol()
     {
@@ -138,8 +130,6 @@ public class ErraticAgent : MonoBehaviour, INpc
         TrySetDestination(_laneWaypoints[_waypointIndex], 5f);
     }
 
-    // ── Pause ─────────────────────────────────────────────────────────────────
-
     void EnterPause()
     {
         if (_state == State.Reacting) return;
@@ -154,8 +144,6 @@ public class ErraticAgent : MonoBehaviour, INpc
         if (_pauseTimer > 0f) return;
         EnterPatrol();
     }
-
-    // ── Ego reaction ──────────────────────────────────────────────────────────
 
     void CheckEgoReaction()
     {
@@ -209,8 +197,6 @@ public class ErraticAgent : MonoBehaviour, INpc
         return best;
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
     bool TrySetDestination(Vector3 candidate, float searchRadius)
     {
         if (!_nav.isOnNavMesh) return false;
@@ -223,8 +209,6 @@ public class ErraticAgent : MonoBehaviour, INpc
 
     bool Roll(float probabilityPerSecond) =>
         Random.value < probabilityPerSecond * Time.deltaTime;
-
-    // ── Gizmos ────────────────────────────────────────────────────────────────
 
     void OnDrawGizmosSelected()
     {
