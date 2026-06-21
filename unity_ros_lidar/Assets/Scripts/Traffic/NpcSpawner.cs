@@ -1,9 +1,9 @@
 using UnityEngine;
 
-// Shared spawn utilities used by all IApronSimulator implementations.
+// Shared spawn utilities used by all ITrafficSimulator implementations.
 // Mirrors AWSIM's NpcVehicleSpawner.IsSpawnable / Spawn pattern but
 // decoupled from any specific simulator type.
-public static class ApronSpawner
+public static class NpcSpawner
 {
     // Returns true if localBounds (in the prefab's local space) placed at position
     // with the given forward direction does not overlap any existing colliders.
@@ -29,7 +29,7 @@ public static class ApronSpawner
     }
 
     // Instantiate prefab at an arbitrary world position with given rotation.
-    // Used by NavMeshApronSimulator which samples positions, not lanes.
+    // Used by NavMeshTrafficSimulator which samples positions, not lanes.
     public static GameObject SpawnAtPosition(GameObject prefab, Vector3 pos, Quaternion rot, Transform parent)
     {
         var go = Object.Instantiate(prefab, pos, rot);

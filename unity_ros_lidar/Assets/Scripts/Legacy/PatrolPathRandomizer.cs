@@ -50,7 +50,7 @@ public class PatrolPathRandomizer : EpisodeRandomizer
             ErraticAgent agent = agentGO.GetComponent<ErraticAgent>();
             if (agent == null) continue;
 
-            // patrolWaypoints removed — agents now follow TaxiwayLane via OnApronInitialize.
+            // patrolWaypoints removed — agents now follow TaxiwayLane via OnNpcInitialize.
             assigned++;
         }
 

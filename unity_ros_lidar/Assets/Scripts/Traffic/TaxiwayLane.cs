@@ -6,7 +6,7 @@ using UnityEngine;
 // without road-specific fields (traffic lights, right-of-way, intersection flag).
 //
 // Wire NextLanes and PrevLanes in the Inspector to form the taxiway graph.
-// RandomApronSimulator traverses NextLanes randomly; RouteApronSimulator follows
+// RandomTrafficSimulator traverses NextLanes randomly; RouteTrafficSimulator follows
 // a fixed ordered sequence supplied at spawn time.
 public class TaxiwayLane : MonoBehaviour
 {

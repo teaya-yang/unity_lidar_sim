@@ -2576,7 +2576,6 @@ GameObject:
   - component: {fileID: 6747997930862398541}
   - component: {fileID: 3699345915770824372}
   - component: {fileID: 4111030247744978520}
-  - component: {fileID: 3398247740807865648}
   m_Layer: 0
   m_Name: UrbanManV1
   m_TagString: Untagged
@@ -2662,51 +2661,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ErraticAgent
   agentType: 0
-  wanderRadius: 20
-  waypointReachedDistance: 1
   minSpeed: 0.5
   maxSpeed: 5.5
+  waypointReachedDistance: 1
+  loopPatrol: 1
   pauseProbabilityPerSecond: 0.08
   minPauseDuration: 0.5
   maxPauseDuration: 4
-  jitterProbabilityPerSecond: 0.12
-  jitterRadius: 4
-  reversalProbabilityPerSecond: 0.04
-  patrolWaypoints: []
-  loopPatrol: 1
-  emergencyVehicles:
-  - {fileID: 0}
-  emergencyRadius: 20
-  erraticSwitchChancePerSecond: 0.01
-  erraticDuration: 15
   egoVehicles:
   - {fileID: 0}
   startleRadius: 12
   reactionBias: 2
   reactionSpeedMultiplier: 3
---- !u!136 &3398247740807865648
-CapsuleCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7897420823872174766}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 1
-  m_ProvidesContacts: 1
-  m_Enabled: 1
-  serializedVersion: 2
-  m_Radius: 0.5
-  m_Height: 1
-  m_Direction: 1
-  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &8140722602787851685
 GameObject:
   m_ObjectHideFlags: 0

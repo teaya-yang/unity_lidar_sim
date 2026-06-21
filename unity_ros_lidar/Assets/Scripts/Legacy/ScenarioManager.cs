@@ -192,7 +192,7 @@ public class ScenarioManager : MonoBehaviour
         if (all.Count == 0) return;
 
         // emergencyVehicles wiring removed — ErraticAgent no longer has that field.
-        Debug.Log($"[ScenarioManager] Found {all.Count} emergency vehicle(s) (wiring skipped — use ApronTrafficManager).");
+        Debug.Log($"[ScenarioManager] Found {all.Count} emergency vehicle(s) (wiring skipped — use TrafficManager).");
     }
 
     // Returns the waypoints assigned to a given entry label, or null if none defined.

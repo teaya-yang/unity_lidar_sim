@@ -2,21 +2,21 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // Ground vehicle NPC — stochastic movement along the TaxiwayLane graph.
-// Implements IApronNpc so ApronTrafficManager can spawn, cull, and despawn it.
+// Implements INpc so TrafficManager can spawn, cull, and despawn it.
 //
-// Routing modes (set before OnApronInitialize / Initialize is called):
+// Routing modes (set before OnNpcInitialize / Initialize is called):
 //   fixedRoute != null  → follows the ordered lane sequence, then continues randomly
 //   fixedRoute == null  → picks a random NextLane at every junction
 //
 // Reacts to the ego aircraft: pulls over or rushes depending on pullOverOnReaction.
-public class ErraticVehicle : MonoBehaviour, IApronNpc
+public class ErraticVehicle : MonoBehaviour, INpc
 {
     static readonly List<ErraticVehicle> s_All = new();
 
     void OnEnable()  => s_All.Add(this);
     void OnDisable() => s_All.Remove(this);
 
-    // ── IApronNpc ─────────────────────────────────────────────────────────────
+    // ── INpc ─────────────────────────────────────────────────────────────
 
     public bool ShouldDespawn => _shouldDespawn;
 
@@ -32,7 +32,7 @@ public class ErraticVehicle : MonoBehaviour, IApronNpc
         }
     }
 
-    public void OnApronInitialize(TaxiwayLane startLane, Transform[] egoVehicles)
+    public void OnNpcInitialize(TaxiwayLane startLane, Transform[] egoVehicles)
     {
         _currentLane = startLane;
         airplane     = egoVehicles != null && egoVehicles.Length > 0 ? egoVehicles[0] : null;
@@ -77,7 +77,7 @@ public class ErraticVehicle : MonoBehaviour, IApronNpc
     [Tooltip("True = pull over and stop when ego approaches; False = rush (speed boost).")]
     public bool pullOverOnReaction = true;
 
-    // Set by RouteApronSimulator before Initialize() — vehicle follows this lane
+    // Set by RouteTrafficSimulator before Initialize() — vehicle follows this lane
     // sequence then continues randomly from the last lane's NextLanes.
     [HideInInspector] public TaxiwayLane[] fixedRoute;
 

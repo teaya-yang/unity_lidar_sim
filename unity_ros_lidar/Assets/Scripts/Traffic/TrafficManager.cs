@@ -4,7 +4,7 @@ using UnityEngine;
 // Top-level traffic orchestrator — replaces ScenarioManager + EpisodeSweepRunner.
 // Attach one instance to a scene GameObject. Wire ego vehicles, then populate
 // randomSims / routeSims / navMeshSims in the Inspector.
-public class ApronTrafficManager : MonoBehaviour
+public class TrafficManager : MonoBehaviour
 {
     [Header("Ego")]
     [Tooltip("Ego aircraft transforms. Passed to every NPC for startle/reaction wiring. " +
@@ -31,12 +31,12 @@ public class ApronTrafficManager : MonoBehaviour
     float _cullingHz = 2f;
 
     [Header("Simulators")]
-    [SerializeField] RandomApronSimulatorConfig[]  _randomSims   = new RandomApronSimulatorConfig[0];
-    [SerializeField] RouteApronSimulatorConfig[]   _routeSims    = new RouteApronSimulatorConfig[0];
-    [SerializeField] NavMeshApronSimulatorConfig[] _navMeshSims  = new NavMeshApronSimulatorConfig[0];
+    [SerializeField] RandomTrafficSimulatorConfig[]  _randomSims   = new RandomTrafficSimulatorConfig[0];
+    [SerializeField] RouteTrafficSimulatorConfig[]   _routeSims    = new RouteTrafficSimulatorConfig[0];
+    [SerializeField] NavMeshTrafficSimulatorConfig[] _navMeshSims  = new NavMeshTrafficSimulatorConfig[0];
 
     // Runtime state
-    readonly List<IApronSimulator> _simulators = new();
+    readonly List<ITrafficSimulator> _simulators = new();
     readonly List<GameObject>      _activeNpcs = new();
     Transform                      _npcRoot;       // scene-hierarchy parent for spawned NPCs
     float                          _cullTimer;
@@ -81,34 +81,34 @@ public class ApronTrafficManager : MonoBehaviour
         foreach (var cfg in _randomSims)
         {
             if (cfg == null) continue;
-            if (!cfg.enabled)                         { Debug.Log("[ApronTrafficManager] RandomSim skipped: disabled."); continue; }
-            if (cfg.prefabs == null || cfg.prefabs.Length == 0) { Debug.LogWarning("[ApronTrafficManager] RandomSim skipped: no prefabs assigned."); continue; }
-            if (cfg.spawnableLanes == null || cfg.spawnableLanes.Length == 0) { Debug.LogWarning("[ApronTrafficManager] RandomSim skipped: no spawnableLanes assigned. Drag TaxiwayLane objects into the list."); continue; }
-            _simulators.Add(new RandomApronSimulator(cfg.prefabs, cfg.spawnableLanes, cfg.spawnCountLimit));
+            if (!cfg.enabled)                         { Debug.Log("[TrafficManager] RandomSim skipped: disabled."); continue; }
+            if (cfg.prefabs == null || cfg.prefabs.Length == 0) { Debug.LogWarning("[TrafficManager] RandomSim skipped: no prefabs assigned."); continue; }
+            if (cfg.spawnableLanes == null || cfg.spawnableLanes.Length == 0) { Debug.LogWarning("[TrafficManager] RandomSim skipped: no spawnableLanes assigned. Drag TaxiwayLane objects into the list."); continue; }
+            _simulators.Add(new RandomTrafficSimulator(cfg.prefabs, cfg.spawnableLanes, cfg.spawnCountLimit));
         }
 
         foreach (var cfg in _routeSims)
         {
             if (cfg == null) continue;
-            if (!cfg.enabled)                    { Debug.Log("[ApronTrafficManager] RouteSim skipped: disabled."); continue; }
-            if (cfg.prefabs == null || cfg.prefabs.Length == 0) { Debug.LogWarning("[ApronTrafficManager] RouteSim skipped: no prefabs assigned."); continue; }
-            if (cfg.route == null || cfg.route.Length == 0) { Debug.LogWarning("[ApronTrafficManager] RouteSim skipped: no route assigned."); continue; }
-            _simulators.Add(new RouteApronSimulator(cfg.prefabs, cfg.route, cfg.spawnCountLimit));
+            if (!cfg.enabled)                    { Debug.Log("[TrafficManager] RouteSim skipped: disabled."); continue; }
+            if (cfg.prefabs == null || cfg.prefabs.Length == 0) { Debug.LogWarning("[TrafficManager] RouteSim skipped: no prefabs assigned."); continue; }
+            if (cfg.route == null || cfg.route.Length == 0) { Debug.LogWarning("[TrafficManager] RouteSim skipped: no route assigned."); continue; }
+            _simulators.Add(new RouteTrafficSimulator(cfg.prefabs, cfg.route, cfg.spawnCountLimit, cfg.egoExclusionRadius));
         }
 
         foreach (var cfg in _navMeshSims)
         {
             if (cfg == null) continue;
-            if (!cfg.enabled)                    { Debug.Log("[ApronTrafficManager] NavMeshSim skipped: disabled."); continue; }
-            if (cfg.prefabs == null || cfg.prefabs.Length == 0) { Debug.LogWarning("[ApronTrafficManager] NavMeshSim skipped: no prefabs assigned."); continue; }
-            _simulators.Add(new NavMeshApronSimulator(cfg.prefabs, cfg.spawnCenter, cfg.spawnRadius, cfg.spawnCountLimit, cfg.patrolLane));
+            if (!cfg.enabled)                    { Debug.Log("[TrafficManager] NavMeshSim skipped: disabled."); continue; }
+            if (cfg.prefabs == null || cfg.prefabs.Length == 0) { Debug.LogWarning("[TrafficManager] NavMeshSim skipped: no prefabs assigned."); continue; }
+            _simulators.Add(new NavMeshTrafficSimulator(cfg.prefabs, cfg.spawnCenter, cfg.spawnRadius, cfg.spawnCountLimit, cfg.patrolLane));
         }
 
         if (_simulators.Count == 0)
-            Debug.LogWarning("[ApronTrafficManager] No simulators built — nothing will spawn. " +
+            Debug.LogWarning("[TrafficManager] No simulators built — nothing will spawn. " +
                              "Assign prefabs and TaxiwayLanes to at least one entry in Random Sims, Route Sims, or Nav Mesh Sims.", this);
 
-        Debug.Log($"[ApronTrafficManager] Initialized seed={seed} | simulators={_simulators.Count} | maxNpc={_maxNpcCount}");
+        Debug.Log($"[TrafficManager] Initialized seed={seed} | simulators={_simulators.Count} | maxNpc={_maxNpcCount}");
     }
 
     // Tear down all NPCs and re-initialize with a new seed.
@@ -117,7 +117,7 @@ public class ApronTrafficManager : MonoBehaviour
     {
         ClearAllNpcs();
         Initialize(newSeed);
-        Debug.Log($"[ApronTrafficManager] Restarted with seed={newSeed}");
+        Debug.Log($"[TrafficManager] Restarted with seed={newSeed}");
     }
 
     // ── Spawn / despawn / cull ────────────────────────────────────────────────
@@ -134,7 +134,7 @@ public class ApronTrafficManager : MonoBehaviour
             if (sim.TrySpawn(egoVehicles, _activeNpcs.Count, _maxNpcCount, _npcRoot, out var npc))
             {
                 _activeNpcs.Add(npc);
-                Debug.Log($"[ApronTrafficManager] Spawned '{npc.name}' | total={_activeNpcs.Count}");
+                Debug.Log($"[TrafficManager] Spawned '{npc.name}' | total={_activeNpcs.Count}");
             }
         }
     }
@@ -146,7 +146,7 @@ public class ApronTrafficManager : MonoBehaviour
             var go = _activeNpcs[i];
             if (go == null) { _activeNpcs.RemoveAt(i); continue; }
 
-            var npc = go.GetComponent<IApronNpc>();
+            var npc = go.GetComponent<INpc>();
             if (npc != null && npc.ShouldDespawn)
             {
                 Destroy(go);

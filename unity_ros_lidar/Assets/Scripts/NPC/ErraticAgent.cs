@@ -4,9 +4,9 @@ using UnityEngine.AI;
 // NavMesh-based NPC pedestrian / ground crew.
 // Mirrors AWSIM's NPC pattern: follows a lane's waypoints, pauses randomly,
 // and reacts to the ego aircraft.  All random wandering has been removed.
-// Implements IApronNpc so ApronTrafficManager can spawn and wire it.
+// Implements INpc so TrafficManager can spawn and wire it.
 [RequireComponent(typeof(NavMeshAgent))]
-public class ErraticAgent : MonoBehaviour, IApronNpc
+public class ErraticAgent : MonoBehaviour, INpc
 {
     public enum AgentType { Pedestrian, Animal }
 
@@ -31,7 +31,7 @@ public class ErraticAgent : MonoBehaviour, IApronNpc
     public float reactionBias = 1f;
     public float reactionSpeedMultiplier = 2f;
 
-    // ── IApronNpc ─────────────────────────────────────────────────────────────
+    // ── INpc ─────────────────────────────────────────────────────────────
 
     public bool ShouldDespawn => false;
 
@@ -47,9 +47,9 @@ public class ErraticAgent : MonoBehaviour, IApronNpc
         }
     }
 
-    // Called by NavMeshApronSimulator after spawn.
-    // startLane: patrol lane assigned by NavMeshApronSimulatorConfig.patrolLane.
-    public void OnApronInitialize(TaxiwayLane startLane, Transform[] egoVehicles)
+    // Called by NavMeshTrafficSimulator after spawn.
+    // startLane: patrol lane assigned by NavMeshTrafficSimulatorConfig.patrolLane.
+    public void OnNpcInitialize(TaxiwayLane startLane, Transform[] egoVehicles)
     {
         this.egoVehicles = egoVehicles;
         if (startLane != null && startLane.Waypoints != null && startLane.Waypoints.Length > 0)
@@ -81,7 +81,7 @@ public class ErraticAgent : MonoBehaviour, IApronNpc
             EnterPatrol();
         else
             Debug.LogWarning($"[ErraticAgent] '{name}' has no patrol lane — assign one via " +
-                             "NavMeshApronSimulatorConfig.patrolLane or it will stand still.", this);
+                             "NavMeshTrafficSimulatorConfig.patrolLane or it will stand still.", this);
     }
 
     void Update()

@@ -2,14 +2,14 @@ using System;
 using UnityEngine;
 using UnityEngine.AI;
 
-// Inspector-serializable config block — drag into ApronTrafficManager.navMeshSims[].
+// Inspector-serializable config block — drag into TrafficManager.navMeshSims[].
 [Serializable]
-public class NavMeshApronSimulatorConfig
+public class NavMeshTrafficSimulatorConfig
 {
     [Tooltip("Disable without removing from the manager's list.")]
     public bool enabled = true;
 
-    [Tooltip("Pool of NPC prefabs. Must have ErraticAgent + IApronNpc.")]
+    [Tooltip("Pool of NPC prefabs. Must have ErraticAgent + INpc.")]
     public GameObject[] prefabs;
 
     [Tooltip("Centre of the area where pedestrians/animals may spawn.")]
@@ -28,7 +28,7 @@ public class NavMeshApronSimulatorConfig
 // Spawns NavMesh-based pedestrian/animal agents (ErraticAgent) by sampling random
 // positions on the baked NavMesh near a spawn centre.
 // If patrolLane is provided, agents patrol that lane's waypoints instead of wandering freely.
-public class NavMeshApronSimulator : IApronSimulator
+public class NavMeshTrafficSimulator : ITrafficSimulator
 {
     readonly GameObject[] _prefabs;
     readonly Vector3      _center;
@@ -39,7 +39,7 @@ public class NavMeshApronSimulator : IApronSimulator
 
     const int k_MaxSampleAttempts = 10;
 
-    public NavMeshApronSimulator(
+    public NavMeshTrafficSimulator(
         GameObject[] prefabs,
         Vector3      spawnCenter,
         float        spawnRadius,
@@ -71,8 +71,8 @@ public class NavMeshApronSimulator : IApronSimulator
         if (!SampleNavMeshPosition(egoVehicles, out pos)) return false;
 
         GameObject prefab = _prefabs[UnityEngine.Random.Range(0, _prefabs.Length)];
-        spawnedNpc = ApronSpawner.SpawnAtPosition(prefab, pos, Quaternion.identity, parent);
-        spawnedNpc.GetComponent<IApronNpc>()?.OnApronInitialize(_patrolLane, egoVehicles);
+        spawnedNpc = NpcSpawner.SpawnAtPosition(prefab, pos, Quaternion.identity, parent);
+        spawnedNpc.GetComponent<INpc>()?.OnNpcInitialize(_patrolLane, egoVehicles);
 
         _spawnCount++;
         return true;

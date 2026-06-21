@@ -1,14 +1,14 @@
 using System;
 using UnityEngine;
 
-// Inspector-serializable config block — drag into ApronTrafficManager.randomSims[].
+// Inspector-serializable config block — drag into TrafficManager.randomSims[].
 [Serializable]
-public class RandomApronSimulatorConfig
+public class RandomTrafficSimulatorConfig
 {
     [Tooltip("Disable without removing from the manager's list.")]
     public bool enabled = true;
 
-    [Tooltip("Pool of NPC prefabs. Must have ErraticVehicle + IApronNpc. One is picked at random per spawn.")]
+    [Tooltip("Pool of NPC prefabs. Must have ErraticVehicle + INpc. One is picked at random per spawn.")]
     public GameObject[] prefabs;
 
     [Tooltip("Lanes where NPCs may spawn. Vehicles are placed at the lane's first waypoint.")]
@@ -21,7 +21,7 @@ public class RandomApronSimulatorConfig
 // Spawns ground vehicles on random TaxiwayLanes. After spawning, ErraticVehicle
 // traverses the lane graph autonomously (picking random NextLanes at each junction).
 // Mirrors AWSIM's RandomTrafficSimulator without the Lanelet2 / traffic-light dependencies.
-public class RandomApronSimulator : IApronSimulator
+public class RandomTrafficSimulator : ITrafficSimulator
 {
     readonly GameObject[]   _prefabs;
     readonly TaxiwayLane[]  _lanes;
@@ -33,7 +33,7 @@ public class RandomApronSimulator : IApronSimulator
     // winning the bounds check over larger ones on the same lane).
     GameObject _pendingPrefab;
 
-    public RandomApronSimulator(GameObject[] prefabs, TaxiwayLane[] spawnableLanes, int limit = 0)
+    public RandomTrafficSimulator(GameObject[] prefabs, TaxiwayLane[] spawnableLanes, int limit = 0)
     {
         _prefabs = prefabs;
         _lanes   = spawnableLanes;
@@ -62,14 +62,14 @@ public class RandomApronSimulator : IApronSimulator
         TaxiwayLane lane = _lanes[UnityEngine.Random.Range(0, _lanes.Length)];
         if (lane == null || lane.Waypoints == null || lane.Waypoints.Length == 0)
         {
-            UnityEngine.Debug.LogWarning("[RandomApronSimulator] Picked a lane with no waypoints — assign waypoints in the TaxiwayLane Inspector.");
+            UnityEngine.Debug.LogWarning("[RandomTrafficSimulator] Picked a lane with no waypoints — assign waypoints in the TaxiwayLane Inspector.");
             return false;
         }
 
-        // Reject if too close to any ego vehicle (distance passed from ApronTrafficManager).
+        // Reject if too close to any ego vehicle (distance passed from TrafficManager).
         if (IsTooCloseToEgo(lane.Waypoints[0], egoVehicles))
         {
-            UnityEngine.Debug.Log("[RandomApronSimulator] Spawn blocked: lane waypoint is within ego exclusion radius.");
+            UnityEngine.Debug.Log("[RandomTrafficSimulator] Spawn blocked: lane waypoint is within ego exclusion radius.");
             return false;
         }
 
@@ -77,8 +77,8 @@ public class RandomApronSimulator : IApronSimulator
         // On an open airport apron the ground mesh collider causes every spawn to fail.
         // ErraticVehicle's separation force resolves any brief overlap at spawn time.
 
-        spawnedNpc = ApronSpawner.SpawnOnLane(_pendingPrefab, lane, parent);
-        spawnedNpc.GetComponent<IApronNpc>()?.OnApronInitialize(lane, egoVehicles);
+        spawnedNpc = NpcSpawner.SpawnOnLane(_pendingPrefab, lane, parent);
+        spawnedNpc.GetComponent<INpc>()?.OnNpcInitialize(lane, egoVehicles);
 
         _pendingPrefab = null;
         _spawnCount++;
