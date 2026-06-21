@@ -64,8 +64,8 @@ public class GroundTruthPublisher : MonoBehaviour
         EnsureRegistered();
 
         TimeStamp stamp = new TimeStamp(Clock.time);
-        ErraticAgent[]  agents   = Object.FindObjectsByType<ErraticAgent>(FindObjectsSortMode.None);
-        ErraticVehicle[] vehicles = Object.FindObjectsByType<ErraticVehicle>(FindObjectsSortMode.None);
+        Agent[]  agents   = Object.FindObjectsByType<Agent>(FindObjectsSortMode.None);
+        Vehicle[] vehicles = Object.FindObjectsByType<Vehicle>(FindObjectsSortMode.None);
 
         var sb = new StringBuilder(1024);
         sb.Append("{");
@@ -81,7 +81,7 @@ public class GroundTruthPublisher : MonoBehaviour
         sb.Append("\"agents\":[");
         for (int i = 0; i < agents.Length; i++)
         {
-            ErraticAgent a = agents[i];
+            Agent a = agents[i];
             if (i > 0) sb.Append(",");
             // GetInstanceID is stable for the object's lifetime (the episode), so the same
             // physical agent keeps the same id across frames — required for instance/tracking.
@@ -94,7 +94,7 @@ public class GroundTruthPublisher : MonoBehaviour
         sb.Append("\"vehicles\":[");
         for (int i = 0; i < vehicles.Length; i++)
         {
-            ErraticVehicle v = vehicles[i];
+            Vehicle v = vehicles[i];
             if (i > 0) sb.Append(",");
             AppendPose(sb, v.gameObject.GetInstanceID(), "Vehicle", GetVehicleState(v), v.transform);
             AppendBbox(sb, v.gameObject);
@@ -194,7 +194,7 @@ public class GroundTruthPublisher : MonoBehaviour
         return b;
     }
 
-    static string GetState(ErraticAgent a)
+    static string GetState(Agent a)
     {
         var nav = a.GetComponent<UnityEngine.AI.NavMeshAgent>();
         if (nav == null) return "Unknown";
@@ -203,14 +203,14 @@ public class GroundTruthPublisher : MonoBehaviour
         return "Wandering";
     }
 
-    static string GetVehicleState(ErraticVehicle v)
+    static string GetVehicleState(Vehicle v)
     {
         if (v.IsStopped)   return "Stopped";
         if (v.IsYielding)  return "Yielding";
         return v.CurrentRoutingMode switch
         {
-            ErraticVehicle.RoutingMode.FixedRoute => "RoutePatrol",
-            ErraticVehicle.RoutingMode.RandomLane => "RandomLane",
+            Vehicle.RoutingMode.FixedRoute => "RoutePatrol",
+            Vehicle.RoutingMode.RandomLane => "RandomLane",
             _                                     => "Wandering",
         };
     }

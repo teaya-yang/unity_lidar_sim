@@ -1,7 +1,7 @@
 using UnityEngine;
 
 // Implemented by every NPC that TrafficManager can spawn, cull, and despawn.
-// Concrete implementations: ErraticVehicle (lane-based), ErraticAgent (NavMesh-based).
+// Concrete implementations: Vehicle (lane-based), Agent (NavMesh-based).
 //
 // The manager calls OnNpcInitialize() once immediately after Instantiate(), before
 // the first Update() fires, so implementations can treat it as a late constructor.

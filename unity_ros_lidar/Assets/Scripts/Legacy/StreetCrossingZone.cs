@@ -4,7 +4,7 @@ using UnityEngine;
 // Place this on an empty GameObject with a BoxCollider covering the sidewalk/curb.
 // Assign crossTarget to a Transform on the opposite side of the street.
 // Detection is by POSITION (not physics overlap): every scanInterval the zone finds all
-// ErraticAgents whose position lies inside the box and rolls them to cross. This works
+// Agents whose position lies inside the box and rolls them to cross. This works
 // regardless of whether agents have colliders/Rigidbodies, and catches agents already
 // standing inside the zone at spawn.
 [RequireComponent(typeof(BoxCollider))]
@@ -26,7 +26,7 @@ public class StreetCrossingZone : MonoBehaviour
     BoxCollider m_Box;
     float m_NextScan;
     // remember who we've already handled so each agent only rolls once per visit
-    readonly HashSet<ErraticAgent> m_Seen = new();
+    readonly HashSet<Agent> m_Seen = new();
 
     void Awake()
     {
@@ -44,11 +44,11 @@ public class StreetCrossingZone : MonoBehaviour
 
     void ScanZone()
     {
-        ErraticAgent[] agents = Object.FindObjectsByType<ErraticAgent>(FindObjectsSortMode.None);
+        Agent[] agents = Object.FindObjectsByType<Agent>(FindObjectsSortMode.None);
 
         int insideCount = 0;
-        var stillInside = new HashSet<ErraticAgent>();
-        foreach (ErraticAgent agent in agents)
+        var stillInside = new HashSet<Agent>();
+        foreach (Agent agent in agents)
         {
             if (!IsInside(agent.transform.position)) continue;
             insideCount++;
@@ -59,7 +59,7 @@ public class StreetCrossingZone : MonoBehaviour
 
             if (Random.value > crossProbability) continue;
 
-            // TriggerCrossing removed — ErraticAgent no longer has a Crossing state.
+            // TriggerCrossing removed — Agent no longer has a Crossing state.
         }
 
         // TEMP diagnostic — how many agents exist and how many are inside the box

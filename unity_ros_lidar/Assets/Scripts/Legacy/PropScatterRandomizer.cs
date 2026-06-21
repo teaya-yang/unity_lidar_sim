@@ -8,7 +8,7 @@ using UnityEngine.AI;
 // annotation). Both are realism gaps a clean sim otherwise lacks. Appearance is irrelevant —
 // Physics.Raycast only sees colliders, so props MUST have a (mesh) collider to register at all.
 //
-// Props are deliberately NOT ErraticAgent/ErraticVehicle, so GroundTruthPublisher emits no boxes
+// Props are deliberately NOT Agent/Vehicle, so GroundTruthPublisher emits no boxes
 // for them — their points are unlabeled background by design. Make sure your training setup treats
 // unlabeled points as background rather than assuming every point belongs to an annotated object.
 //
@@ -19,7 +19,7 @@ public class PropScatterRandomizer : EpisodeRandomizer
     [Header("Prop prefabs")]
     [Tooltip("Pool of clutter prefabs — each scattered prop picks one at random. Each prefab should " +
              "have a mesh collider (no collider = invisible to the LiDAR) and must NOT be an " +
-             "ErraticAgent/ErraticVehicle (those would get labeled as annotation targets).")]
+             "Agent/Vehicle (those would get labeled as annotation targets).")]
     public GameObject[] propPrefabs;
 
     [Header("Count")]
@@ -165,16 +165,16 @@ public class PropScatterRandomizer : EpisodeRandomizer
     }
 
     // One-time-ish sanity check per scatter: a collider-less prop is invisible to the raycast LiDAR,
-    // and an ErraticAgent/ErraticVehicle prop would be picked up by GroundTruthPublisher as a label.
+    // and an Agent/Vehicle prop would be picked up by GroundTruthPublisher as a label.
     static void WarnIfMislabeledOrInvisible(GameObject prefab)
     {
         if (prefab.GetComponentInChildren<Collider>() == null)
             Debug.LogWarning($"[PropScatterRandomizer] Prop '{prefab.name}' has no Collider — the LiDAR " +
                              "raycast cannot see it. Add a mesh collider or it contributes nothing.", prefab);
 
-        if (prefab.GetComponentInChildren<ErraticAgent>() != null ||
-            prefab.GetComponentInChildren<ErraticVehicle>() != null)
-            Debug.LogWarning($"[PropScatterRandomizer] Prop '{prefab.name}' is an ErraticAgent/ErraticVehicle — " +
+        if (prefab.GetComponentInChildren<Agent>() != null ||
+            prefab.GetComponentInChildren<Vehicle>() != null)
+            Debug.LogWarning($"[PropScatterRandomizer] Prop '{prefab.name}' is an Agent/Vehicle — " +
                              "it will be emitted as a labeled annotation, not unlabeled clutter.", prefab);
     }
 

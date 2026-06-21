@@ -10,7 +10,7 @@ public class SpawnEntry
     public string label = "Pedestrian";
 
     [Tooltip("Pool of prefabs — one is picked at random per spawn. " +
-             "Prefab must have either ErraticAgent or ErraticVehicle.")]
+             "Prefab must have either Agent or Vehicle.")]
     public GameObject[] prefabs;
 
     [Tooltip("Minimum number to spawn (inclusive).")]

@@ -8,7 +8,7 @@ public class RandomTrafficSimulatorConfig
     [Tooltip("Disable without removing from the manager's list.")]
     public bool enabled = true;
 
-    [Tooltip("Pool of NPC prefabs. Must have ErraticVehicle + INpc. One is picked at random per spawn.")]
+    [Tooltip("Pool of NPC prefabs. Must have Vehicle + INpc. One is picked at random per spawn.")]
     public GameObject[] prefabs;
 
     [Tooltip("Lanes where NPCs may spawn. Vehicles are placed at the lane's first waypoint.")]
@@ -22,7 +22,7 @@ public class RandomTrafficSimulatorConfig
     [Min(0f)] public float spawnClearance = 6f;
 }
 
-// Spawns ground vehicles on random TaxiwayLanes. After spawning, ErraticVehicle
+// Spawns ground vehicles on random TaxiwayLanes. After spawning, Vehicle
 // traverses the lane graph autonomously (picking random NextLanes at each junction).
 // Mirrors AWSIM's RandomTrafficSimulator without the Lanelet2 / traffic-light dependencies.
 public class RandomTrafficSimulator : ITrafficSimulator
@@ -82,12 +82,12 @@ public class RandomTrafficSimulator : ITrafficSimulator
         // Hold the spawn until the lane's entry waypoint is clear — otherwise a new vehicle
         // stacks on top of an existing one and the car-following logic gridlocks them both.
         // Keep _pendingPrefab locked so we retry the same prefab on the next attempt.
-        if (_spawnClearance > 0f && ErraticVehicle.AnyVehicleWithin(lane.Waypoints[0], _spawnClearance))
+        if (_spawnClearance > 0f && Vehicle.AnyVehicleWithin(lane.Waypoints[0], _spawnClearance))
             return false;
 
         // NOTE: Physics.CheckBox is intentionally skipped here.
         // On an open airport apron the ground mesh collider causes every spawn to fail.
-        // ErraticVehicle's separation force resolves any brief overlap at spawn time.
+        // Vehicle's separation force resolves any brief overlap at spawn time.
 
         spawnedNpc = NpcSpawner.SpawnOnLane(_pendingPrefab, lane, parent);
         spawnedNpc.GetComponent<INpc>()?.OnNpcInitialize(lane, egoVehicles);

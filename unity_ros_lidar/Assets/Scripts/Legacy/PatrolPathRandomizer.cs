@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
-// Generates a unique random patrol path for every spawned ErraticAgent each episode.
+// Generates a unique random patrol path for every spawned Agent each episode.
 // Must run AFTER AgentPlacementRandomizer in the randomizer pipeline (index > placement).
 //
 // Strategy: random walk — each waypoint steps from the previous one in a random direction,
@@ -47,7 +47,7 @@ public class PatrolPathRandomizer : EpisodeRandomizer
         int assigned = 0;
         foreach (GameObject agentGO in manager.SpawnedAgents)
         {
-            ErraticAgent agent = agentGO.GetComponent<ErraticAgent>();
+            Agent agent = agentGO.GetComponent<Agent>();
             if (agent == null) continue;
 
             // patrolWaypoints removed — agents now follow TaxiwayLane via OnNpcInitialize.

@@ -1,14 +1,14 @@
 using UnityEngine;
 using UnityEditor;
 
-[CustomEditor(typeof(ErraticVehicle))]
-public class ErraticVehicleEditor : Editor
+[CustomEditor(typeof(Vehicle))]
+public class VehicleEditor : Editor
 {
     public override void OnInspectorGUI()
     {
         DrawDefaultInspector();
 
-        var v = (ErraticVehicle)target;
+        var v = (Vehicle)target;
         if (!Application.isPlaying) return;
 
         EditorGUILayout.Space(8);
@@ -18,8 +18,8 @@ public class ErraticVehicleEditor : Editor
         Color prev = GUI.color;
         GUI.color = v.CurrentRoutingMode switch
         {
-            ErraticVehicle.RoutingMode.FixedRoute  => Color.cyan,
-            ErraticVehicle.RoutingMode.RandomLane  => Color.yellow,
+            Vehicle.RoutingMode.FixedRoute  => Color.cyan,
+            Vehicle.RoutingMode.RandomLane  => Color.yellow,
             _                                       => Color.white,
         };
         EditorGUILayout.LabelField("Routing Mode", v.CurrentRoutingMode.ToString());

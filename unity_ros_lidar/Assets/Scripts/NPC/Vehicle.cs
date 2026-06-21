@@ -9,9 +9,9 @@ using UnityEngine;
 //   fixedRoute == null  → picks a random NextLane at every junction
 //
 // Holds at IsHoldingPosition lanes (e.g. runway crossings) until the ego clears.
-public class ErraticVehicle : MonoBehaviour, INpc
+public class Vehicle : MonoBehaviour, INpc
 {
-    static readonly List<ErraticVehicle> s_All = new();
+    static readonly List<Vehicle> s_All = new();
 
     void OnEnable()  => s_All.Add(this);
     void OnDisable() => s_All.Remove(this);
@@ -22,7 +22,7 @@ public class ErraticVehicle : MonoBehaviour, INpc
     public static bool AnyVehicleWithin(Vector3 pos, float radius)
     {
         float r2 = radius * radius;
-        foreach (ErraticVehicle v in s_All)
+        foreach (Vehicle v in s_All)
         {
             if (v == null) continue;
             Vector3 d = v.transform.position - pos;
@@ -36,12 +36,12 @@ public class ErraticVehicle : MonoBehaviour, INpc
     // 'radius' (m) of 'junctionPoint'. Used for intersection right-of-way: a give-way vehicle
     // holds while a priority lane is occupied near the junction. The radius bounds the conflict
     // so a vehicle far down a long priority lane doesn't block entry indefinitely.
-    public static bool AnyVehicleNearOnLanes(List<TaxiwayLane> lanes, Vector3 junctionPoint, float radius, ErraticVehicle except)
+    public static bool AnyVehicleNearOnLanes(List<TaxiwayLane> lanes, Vector3 junctionPoint, float radius, Vehicle except)
     {
         if (lanes == null || lanes.Count == 0) return false;
         float r2 = radius * radius;
 
-        foreach (ErraticVehicle v in s_All)
+        foreach (Vehicle v in s_All)
         {
             if (v == null || v == except || v._currentLane == null) continue;
             if (!lanes.Contains(v._currentLane)) continue;
@@ -188,7 +188,7 @@ public class ErraticVehicle : MonoBehaviour, INpc
         {
             float jump = Vector3.Distance(transform.position, _lastPos);
             if (jump > maxSpeed * Time.deltaTime + 1f)
-                Debug.LogWarning($"[ErraticVehicle] '{name}' jumped {jump:F1} m between frames — " +
+                Debug.LogWarning($"[Vehicle] '{name}' jumped {jump:F1} m between frames — " +
                                  "another component may also be moving this object.", this);
         }
 
@@ -347,7 +347,7 @@ public class ErraticVehicle : MonoBehaviour, INpc
     float GapToLeader(Vector3 travelDir)
     {
         float best = float.PositiveInfinity;
-        foreach (ErraticVehicle other in s_All)
+        foreach (Vehicle other in s_All)
         {
             if (other == this) continue;
             Vector3 toOther = other.transform.position - transform.position;
@@ -379,7 +379,7 @@ public class ErraticVehicle : MonoBehaviour, INpc
     Vector3 LateralSeparation(Vector3 travelDir)
     {
         Vector3 offset = Vector3.zero;
-        foreach (ErraticVehicle other in s_All)
+        foreach (Vehicle other in s_All)
         {
             if (other == this) continue;
             Vector3 diff = transform.position - other.transform.position;

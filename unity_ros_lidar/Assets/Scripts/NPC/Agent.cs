@@ -5,7 +5,7 @@ using UnityEngine.AI;
 // Mirrors AWSIM's NPC pattern: follows a lane's waypoints and pauses randomly.
 // Implements INpc so TrafficManager can spawn and wire it.
 [RequireComponent(typeof(NavMeshAgent))]
-public class ErraticAgent : MonoBehaviour, INpc
+public class Agent : MonoBehaviour, INpc
 {
     public enum AgentType { Pedestrian, Animal }
 
@@ -66,7 +66,7 @@ public class ErraticAgent : MonoBehaviour, INpc
         if (HasPatrolPath)
             EnterPatrol();
         else
-            Debug.LogWarning($"[ErraticAgent] '{name}' has no patrol lane — assign one via " +
+            Debug.LogWarning($"[Agent] '{name}' has no patrol lane — assign one via " +
                              "NavMeshTrafficSimulatorConfig.patrolLane or it will stand still.", this);
     }
 

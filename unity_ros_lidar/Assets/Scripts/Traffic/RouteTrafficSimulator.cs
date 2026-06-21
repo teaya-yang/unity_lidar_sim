@@ -8,7 +8,7 @@ public class RouteTrafficSimulatorConfig
     [Tooltip("Disable without removing from the manager's list.")]
     public bool enabled = true;
 
-    [Tooltip("Pool of NPC prefabs. Must have ErraticVehicle + INpc.")]
+    [Tooltip("Pool of NPC prefabs. Must have Vehicle + INpc.")]
     public GameObject[] prefabs;
 
     [Tooltip("Ordered lane sequence. The first lane is the spawn point. " +
@@ -83,17 +83,17 @@ public class RouteTrafficSimulator : ITrafficSimulator
 
         // Hold the spawn until the entry waypoint is clear — otherwise a new vehicle stacks
         // on top of the previous one and the car-following logic gridlocks them both.
-        if (_spawnClearance > 0f && ErraticVehicle.AnyVehicleWithin(spawnLane.Waypoints[0], _spawnClearance))
+        if (_spawnClearance > 0f && Vehicle.AnyVehicleWithin(spawnLane.Waypoints[0], _spawnClearance))
             return false;
 
         // NOTE: Physics.CheckBox is intentionally skipped here — same reason as RandomTrafficSimulator.
         // The airport ground mesh collider causes IsSpawnable() to reject every position.
-        // ErraticVehicle's separation force resolves any brief overlap at spawn time.
+        // Vehicle's separation force resolves any brief overlap at spawn time.
         GameObject prefab = _prefabs[UnityEngine.Random.Range(0, _prefabs.Length)];
         spawnedNpc = NpcSpawner.SpawnOnLane(prefab, spawnLane, parent);
 
-        // Wire the fixed route so ErraticVehicle follows it before going random.
-        var vehicle = spawnedNpc.GetComponent<ErraticVehicle>();
+        // Wire the fixed route so Vehicle follows it before going random.
+        var vehicle = spawnedNpc.GetComponent<Vehicle>();
         if (vehicle != null) vehicle.fixedRoute = _route;
 
         spawnedNpc.GetComponent<INpc>()?.OnNpcInitialize(spawnLane, egoVehicles);

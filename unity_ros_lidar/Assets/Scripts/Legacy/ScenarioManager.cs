@@ -79,7 +79,7 @@ public class ScenarioManager : MonoBehaviour
             SpawnAllAgents();
         }
 
-        // Reseed so spawned agents' runtime behavior (ErraticAgent speed/pause/jitter draws)
+        // Reseed so spawned agents' runtime behavior (Agent speed/pause/jitter draws)
         // reproduces from seed alone, independent of how many randomizers ran.
         Random.InitState(seed);
 
@@ -114,7 +114,7 @@ public class ScenarioManager : MonoBehaviour
     }
 
     // Spawns one agent chosen randomly from entry.prefabs.
-    // Handles both ErraticAgent (NavMesh pedestrian/animal) and ErraticVehicle prefabs.
+    // Handles both Agent (NavMesh pedestrian/animal) and Vehicle prefabs.
     bool SpawnAgentFromEntry(int index, SpawnEntry entry)
     {
         if (entry.prefabs == null || entry.prefabs.Length == 0)
@@ -126,7 +126,7 @@ public class ScenarioManager : MonoBehaviour
         GameObject prefab = entry.prefabs[Random.Range(0, entry.prefabs.Length)];
         Transform[] entryWaypoints = FindWaypoints(entry.label);
 
-        bool isVehicle = prefab.GetComponent<ErraticVehicle>() != null;
+        bool isVehicle = prefab.GetComponent<Vehicle>() != null;
 
         if (isVehicle && (entryWaypoints == null || entryWaypoints.Length == 0))
             Debug.LogWarning($"[ScenarioManager] Vehicle entry '{entry.label}' has no waypoints. " +
@@ -153,10 +153,11 @@ public class ScenarioManager : MonoBehaviour
         GameObject go = Instantiate(prefab, spawnPos, Quaternion.identity);
         go.name = $"{entry.label}_{index}";
 
-        // ErraticAgent no longer reacts to the ego; speed is kept from the prefab.
+        // Agent no longer reacts to the ego; speed is kept from the prefab.
         // (Legacy spawner — superseded by TrafficManager.)
 
-        ErraticVehicle vehicle = go.GetComponent<ErraticVehicle>();
+        Agent agent     = go.GetComponent<Agent>();
+        Vehicle vehicle = go.GetComponent<Vehicle>();
         if (vehicle != null)
         {
             vehicle.airplane = egoVehicles != null && egoVehicles.Length > 0 ? egoVehicles[0] : null;
@@ -164,27 +165,27 @@ public class ScenarioManager : MonoBehaviour
         }
 
         if (agent == null && vehicle == null)
-            Debug.LogWarning($"[ScenarioManager] '{go.name}' has neither ErraticAgent nor ErraticVehicle.", this);
+            Debug.LogWarning($"[ScenarioManager] '{go.name}' has neither Agent nor Vehicle.", this);
 
         m_SpawnedAgents.Add(go);
         return true;
     }
 
-    // Builds the combined emergency vehicle list (scene-placed + runtime-spawned ErraticVehicles)
-    // and assigns it to every spawned ErraticAgent.
+    // Builds the combined emergency vehicle list (scene-placed + runtime-spawned Vehicles)
+    // and assigns it to every spawned Agent.
     void WireEmergencyVehicles()
     {
         var all = new List<Transform>();
 
         foreach (GameObject go in m_SpawnedAgents)
         {
-            if (go != null && go.GetComponent<ErraticVehicle>() != null)
+            if (go != null && go.GetComponent<Vehicle>() != null)
                 all.Add(go.transform);
         }
 
         if (all.Count == 0) return;
 
-        // emergencyVehicles wiring removed — ErraticAgent no longer has that field.
+        // emergencyVehicles wiring removed — Agent no longer has that field.
         Debug.Log($"[ScenarioManager] Found {all.Count} emergency vehicle(s) (wiring skipped — use TrafficManager).");
     }
 

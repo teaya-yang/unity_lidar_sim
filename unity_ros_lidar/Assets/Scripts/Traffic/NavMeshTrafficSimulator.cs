@@ -9,7 +9,7 @@ public class NavMeshTrafficSimulatorConfig
     [Tooltip("Disable without removing from the manager's list.")]
     public bool enabled = true;
 
-    [Tooltip("Pool of NPC prefabs. Must have ErraticAgent + INpc.")]
+    [Tooltip("Pool of NPC prefabs. Must have Agent + INpc.")]
     public GameObject[] prefabs;
 
     [Tooltip("Centre of the area where pedestrians/animals may spawn.")]
@@ -25,7 +25,7 @@ public class NavMeshTrafficSimulatorConfig
     public TaxiwayLane patrolLane;
 }
 
-// Spawns NavMesh-based pedestrian/animal agents (ErraticAgent) by sampling random
+// Spawns NavMesh-based pedestrian/animal agents (Agent) by sampling random
 // positions on the baked NavMesh near a spawn centre.
 // If patrolLane is provided, agents patrol that lane's waypoints instead of wandering freely.
 public class NavMeshTrafficSimulator : ITrafficSimulator

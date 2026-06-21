@@ -96,7 +96,7 @@ public class TaxiwayLane : MonoBehaviour
             Gizmos.color = orange;
             Gizmos.DrawSphere(stopPoint, 0.55f);
 
-            // Orange wire-sphere showing the conflict-detection radius (matches ErraticVehicle default).
+            // Orange wire-sphere showing the conflict-detection radius (matches Vehicle default).
             Gizmos.color = new Color(1f, 0.55f, 0f, 0.25f);
             Gizmos.DrawWireSphere(stopPoint, 20f);
 

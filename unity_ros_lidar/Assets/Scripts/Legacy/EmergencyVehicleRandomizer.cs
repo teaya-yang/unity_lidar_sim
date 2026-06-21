@@ -50,7 +50,7 @@ public class EmergencyVehicleRandomizer : EpisodeRandomizer
             GameObject go = Object.Instantiate(prefab, spawnPos, Quaternion.identity);
             go.name = $"EmergencyVehicle_{i}";
 
-            ErraticVehicle ev = go.GetComponent<ErraticVehicle>();
+            Vehicle ev = go.GetComponent<Vehicle>();
             if (ev != null)
             {
                 ev.airplane = manager.egoVehicles != null && manager.egoVehicles.Length > 0
@@ -61,7 +61,7 @@ public class EmergencyVehicleRandomizer : EpisodeRandomizer
             spawnedTransforms.Add(go.transform);
         }
 
-        // emergencyVehicles wiring removed — ErraticAgent no longer has that field.
+        // emergencyVehicles wiring removed — Agent no longer has that field.
         Debug.Log($"[EmergencyVehicleRandomizer] Spawned {count} emergency vehicle(s).");
     }
 

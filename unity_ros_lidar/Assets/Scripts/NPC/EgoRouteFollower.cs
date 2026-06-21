@@ -3,7 +3,7 @@ using UnityEngine;
 // Drives the ego airplane along a fixed sequence of TaxiwayLanes.
 // Attach to the ego GameObject. Assign a route in the Inspector and press Play.
 //
-// The ego is treated as an ErraticVehicle peer for the purpose of intersection
+// The ego is treated as an Vehicle peer for the purpose of intersection
 // right-of-way: NPCs on give-way lanes will detect the ego on priority lanes
 // and yield accordingly.
 //
@@ -48,7 +48,7 @@ public class EgoRouteFollower : MonoBehaviour
     bool        _finished;
     bool        _yielding;
 
-    // Static registry so ErraticVehicle.AnyVehicleNearOnLanes can also check the ego.
+    // Static registry so Vehicle.AnyVehicleNearOnLanes can also check the ego.
     public static EgoRouteFollower Instance { get; private set; }
 
     Rigidbody _rb;
@@ -150,7 +150,7 @@ public class EgoRouteFollower : MonoBehaviour
         if (_waypointIndex < wps.Length - 1) return false;
 
         Vector3 junction = wps[^1];
-        return ErraticVehicle.AnyVehicleNearOnLanes(
+        return Vehicle.AnyVehicleNearOnLanes(
             _currentLane.YieldToLanes, junction, junctionConflictRadius, null);
     }
 

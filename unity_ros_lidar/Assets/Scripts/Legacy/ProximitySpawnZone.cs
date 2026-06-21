@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.AI;
 
 /// <summary>
-/// Spawns and culls ErraticAgents around a moving ego (e.g. the airplane).
+/// Spawns and culls Agents around a moving ego (e.g. the airplane).
 /// Agents beyond cullRadius are destroyed; new ones fill up to targetCount.
 /// Attach to any GameObject in the scene and drag the airplane into ego.
 /// </summary>
@@ -13,7 +13,7 @@ public class ProximitySpawnZone : MonoBehaviour
     public Transform ego;
 
     [Header("Prefabs")]
-    public GameObject[] agentPrefabs;        // person / animal prefabs with ErraticAgent
+    public GameObject[] agentPrefabs;        // person / animal prefabs with Agent
 
     [Header("Spawn settings")]
     public int   targetCount      = 8;
@@ -123,12 +123,12 @@ public class ProximitySpawnZone : MonoBehaviour
         GameObject go = Instantiate(prefab, hit.position, Quaternion.identity);
         go.name = $"ProxAgent_{m_Agents.Count}";
 
-        ErraticAgent agent = go.GetComponent<ErraticAgent>();
+        Agent agent = go.GetComponent<Agent>();
         if (agent != null)
         {
             agent.minSpeed = minSpeed;
             agent.maxSpeed = maxSpeed;
-            // ErraticAgent no longer reacts to the ego. (Legacy spawner — superseded by TrafficManager.)
+            // Agent no longer reacts to the ego. (Legacy spawner — superseded by TrafficManager.)
         }
 
         m_Agents.Add(go);
