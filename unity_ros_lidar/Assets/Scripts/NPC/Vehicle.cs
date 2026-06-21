@@ -99,6 +99,11 @@ public class Vehicle : MonoBehaviour, INpc
     public float waypointReachedDistance = 2f;
     public float wanderRadius            = 60f;
 
+    [Tooltip("When the vehicle reaches the end of its route (no further lane), despawn it instead " +
+             "of pulling over — prevents vehicles stacking on the final waypoint. Untick to keep " +
+             "the old pull-over-and-wait behaviour.")]
+    public bool despawnAtRouteEnd = true;
+
     [Header("Micro-stops")]
     [Range(0f, 1f)] public float stopProbabilityPerSecond = 0.04f;
     public float minStopDuration = 1f;
@@ -264,9 +269,18 @@ public class Vehicle : MonoBehaviour, INpc
 
         TaxiwayLane next = PickNextLane();
         if (next != null)
+        {
             EnterLane(next);
+            return;
+        }
+
+        // Dead-end / end of fixed route. Despawn so vehicles don't pile up on the last
+        // waypoint (TrafficManager.Despawn destroys it next FixedUpdate). When despawning is
+        // disabled, fall back to pulling over.
+        if (despawnAtRouteEnd)
+            _shouldDespawn = true;
         else
-            EnterStop(maxStopDuration); // dead-end: pull over
+            EnterStop(maxStopDuration);
     }
 
     // Intersection right-of-way (explicit lane-priority rule, ported from AWSIM).
