@@ -16,6 +16,22 @@ public class ErraticVehicle : MonoBehaviour, INpc
     void OnEnable()  => s_All.Add(this);
     void OnDisable() => s_All.Remove(this);
 
+    // True if any active vehicle is within 'radius' (m) of 'pos' on the horizontal plane.
+    // Used by the traffic simulators to avoid spawning a new vehicle on top of an existing
+    // one at a shared lane entry point (which otherwise gridlocks the car-following logic).
+    public static bool AnyVehicleWithin(Vector3 pos, float radius)
+    {
+        float r2 = radius * radius;
+        foreach (ErraticVehicle v in s_All)
+        {
+            if (v == null) continue;
+            Vector3 d = v.transform.position - pos;
+            d.y = 0f;
+            if (d.sqrMagnitude < r2) return true;
+        }
+        return false;
+    }
+
     // ── INpc ─────────────────────────────────────────────────────────────
 
     public bool ShouldDespawn => _shouldDespawn;

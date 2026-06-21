@@ -84,7 +84,7 @@ public class TrafficManager : MonoBehaviour
             if (!cfg.enabled)                         { Debug.Log("[TrafficManager] RandomSim skipped: disabled."); continue; }
             if (cfg.prefabs == null || cfg.prefabs.Length == 0) { Debug.LogWarning("[TrafficManager] RandomSim skipped: no prefabs assigned."); continue; }
             if (cfg.spawnableLanes == null || cfg.spawnableLanes.Length == 0) { Debug.LogWarning("[TrafficManager] RandomSim skipped: no spawnableLanes assigned. Drag TaxiwayLane objects into the list."); continue; }
-            _simulators.Add(new RandomTrafficSimulator(cfg.prefabs, cfg.spawnableLanes, cfg.spawnCountLimit));
+            _simulators.Add(new RandomTrafficSimulator(cfg.prefabs, cfg.spawnableLanes, cfg.spawnCountLimit, cfg.spawnClearance));
         }
 
         foreach (var cfg in _routeSims)
@@ -93,7 +93,7 @@ public class TrafficManager : MonoBehaviour
             if (!cfg.enabled)                    { Debug.Log("[TrafficManager] RouteSim skipped: disabled."); continue; }
             if (cfg.prefabs == null || cfg.prefabs.Length == 0) { Debug.LogWarning("[TrafficManager] RouteSim skipped: no prefabs assigned."); continue; }
             if (cfg.route == null || cfg.route.Length == 0) { Debug.LogWarning("[TrafficManager] RouteSim skipped: no route assigned."); continue; }
-            _simulators.Add(new RouteTrafficSimulator(cfg.prefabs, cfg.route, cfg.spawnCountLimit, cfg.egoExclusionRadius));
+            _simulators.Add(new RouteTrafficSimulator(cfg.prefabs, cfg.route, cfg.spawnCountLimit, cfg.egoExclusionRadius, cfg.spawnClearance));
         }
 
         foreach (var cfg in _navMeshSims)

@@ -21,6 +21,11 @@ public class RouteTrafficSimulatorConfig
     [Tooltip("Don't spawn if the route's first waypoint is within this distance of an ego vehicle (m). " +
              "Set to 0 to allow spawning right next to the ego — useful for close-range occlusion scenarios.")]
     [Min(0f)] public float egoExclusionRadius = 50f;
+
+    [Tooltip("Don't spawn if another vehicle is already within this distance of the entry waypoint (m). " +
+             "Prevents vehicles stacking at the spawn point and gridlocking car-following. " +
+             "Set roughly to the prefab's stopDistance or a bit more.")]
+    [Min(0f)] public float spawnClearance = 6f;
 }
 
 // Spawns vehicles that follow a fixed ordered lane sequence, then continue randomly
@@ -32,14 +37,17 @@ public class RouteTrafficSimulator : ITrafficSimulator
     readonly TaxiwayLane[] _route;
     readonly int           _limit;
     readonly float         _egoExclusionRadius;
+    readonly float         _spawnClearance;
     int                    _spawnCount;
 
-    public RouteTrafficSimulator(GameObject[] prefabs, TaxiwayLane[] route, int limit = 0, float egoExclusionRadius = 50f)
+    public RouteTrafficSimulator(GameObject[] prefabs, TaxiwayLane[] route, int limit = 0,
+                                 float egoExclusionRadius = 50f, float spawnClearance = 6f)
     {
         _prefabs            = prefabs;
         _route              = route;
         _limit              = limit;
         _egoExclusionRadius = egoExclusionRadius;
+        _spawnClearance     = spawnClearance;
     }
 
     public bool IsEnabled() =>
@@ -72,6 +80,11 @@ public class RouteTrafficSimulator : ITrafficSimulator
                                   "this Route Sim config (0 = spawn right next to the ego).");
             return false;
         }
+
+        // Hold the spawn until the entry waypoint is clear — otherwise a new vehicle stacks
+        // on top of the previous one and the car-following logic gridlocks them both.
+        if (_spawnClearance > 0f && ErraticVehicle.AnyVehicleWithin(spawnLane.Waypoints[0], _spawnClearance))
+            return false;
 
         // NOTE: Physics.CheckBox is intentionally skipped here — same reason as RandomTrafficSimulator.
         // The airport ground mesh collider causes IsSpawnable() to reject every position.

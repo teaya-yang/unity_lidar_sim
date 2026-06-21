@@ -16,6 +16,10 @@ public class RandomTrafficSimulatorConfig
 
     [Tooltip("Maximum NPCs this simulator will ever spawn. 0 = unlimited.")]
     [Min(0)] public int spawnCountLimit;
+
+    [Tooltip("Don't spawn if another vehicle is already within this distance of the chosen lane's " +
+             "entry waypoint (m). Prevents vehicles stacking and gridlocking car-following.")]
+    [Min(0f)] public float spawnClearance = 6f;
 }
 
 // Spawns ground vehicles on random TaxiwayLanes. After spawning, ErraticVehicle
@@ -26,6 +30,7 @@ public class RandomTrafficSimulator : ITrafficSimulator
     readonly GameObject[]   _prefabs;
     readonly TaxiwayLane[]  _lanes;
     readonly int            _limit;
+    readonly float          _spawnClearance;
     int                     _spawnCount;
 
     // Prefab is locked between TryGetSpawnInfo and Spawn to avoid the size-race
@@ -33,11 +38,12 @@ public class RandomTrafficSimulator : ITrafficSimulator
     // winning the bounds check over larger ones on the same lane).
     GameObject _pendingPrefab;
 
-    public RandomTrafficSimulator(GameObject[] prefabs, TaxiwayLane[] spawnableLanes, int limit = 0)
+    public RandomTrafficSimulator(GameObject[] prefabs, TaxiwayLane[] spawnableLanes, int limit = 0, float spawnClearance = 6f)
     {
-        _prefabs = prefabs;
-        _lanes   = spawnableLanes;
-        _limit   = limit;
+        _prefabs        = prefabs;
+        _lanes          = spawnableLanes;
+        _limit          = limit;
+        _spawnClearance = spawnClearance;
     }
 
     public bool IsEnabled() =>
@@ -72,6 +78,12 @@ public class RandomTrafficSimulator : ITrafficSimulator
             UnityEngine.Debug.Log("[RandomTrafficSimulator] Spawn blocked: lane waypoint is within ego exclusion radius.");
             return false;
         }
+
+        // Hold the spawn until the lane's entry waypoint is clear — otherwise a new vehicle
+        // stacks on top of an existing one and the car-following logic gridlocks them both.
+        // Keep _pendingPrefab locked so we retry the same prefab on the next attempt.
+        if (_spawnClearance > 0f && ErraticVehicle.AnyVehicleWithin(lane.Waypoints[0], _spawnClearance))
+            return false;
 
         // NOTE: Physics.CheckBox is intentionally skipped here.
         // On an open airport apron the ground mesh collider causes every spawn to fail.
