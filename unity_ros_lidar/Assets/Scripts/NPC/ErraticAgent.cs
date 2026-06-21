@@ -2,8 +2,7 @@ using UnityEngine;
 using UnityEngine.AI;
 
 // NavMesh-based NPC pedestrian / ground crew.
-// Mirrors AWSIM's NPC pattern: follows a lane's waypoints, pauses randomly,
-// and reacts to the ego aircraft.
+// Mirrors AWSIM's NPC pattern: follows a lane's waypoints and pauses randomly.
 // Implements INpc so TrafficManager can spawn and wire it.
 [RequireComponent(typeof(NavMeshAgent))]
 public class ErraticAgent : MonoBehaviour, INpc
@@ -24,13 +23,6 @@ public class ErraticAgent : MonoBehaviour, INpc
     public float minPauseDuration = 0.5f;
     public float maxPauseDuration = 3f;
 
-    [Header("Ego Vehicle Reaction")]
-    public Transform[] egoVehicles;
-    public float startleRadius = 12f;
-    [Tooltip("Positive = flee, Negative = approach (curious)")]
-    public float reactionBias = 1f;
-    public float reactionSpeedMultiplier = 2f;
-
     public bool ShouldDespawn => false;
 
     public Bounds Bounds
@@ -47,9 +39,9 @@ public class ErraticAgent : MonoBehaviour, INpc
 
     // Called by NavMeshTrafficSimulator after spawn.
     // startLane: patrol lane assigned by NavMeshTrafficSimulatorConfig.patrolLane.
+    // egoVehicles is part of the INpc contract but unused — agents no longer react to the ego.
     public void OnNpcInitialize(TaxiwayLane startLane, Transform[] egoVehicles)
     {
-        this.egoVehicles = egoVehicles;
         if (startLane != null && startLane.Waypoints != null && startLane.Waypoints.Length > 0)
             _laneWaypoints = startLane.Waypoints;
     }
@@ -63,7 +55,7 @@ public class ErraticAgent : MonoBehaviour, INpc
     int          _patrolDir = 1;
     float        _pauseTimer;
 
-    enum State { Patrolling, Paused, Reacting }
+    enum State { Patrolling, Paused }
     State _state = State.Patrolling;
 
     void Start()
@@ -80,13 +72,10 @@ public class ErraticAgent : MonoBehaviour, INpc
 
     void Update()
     {
-        CheckEgoReaction();
-
         switch (_state)
         {
             case State.Patrolling: UpdatePatrolling(); break;
             case State.Paused:     UpdatePaused();     break;
-            case State.Reacting:   UpdateReacting();   break;
         }
     }
 
@@ -132,7 +121,6 @@ public class ErraticAgent : MonoBehaviour, INpc
 
     void EnterPause()
     {
-        if (_state == State.Reacting) return;
         _state           = State.Paused;
         _nav.isStopped   = true;
         _pauseTimer      = Random.Range(minPauseDuration, maxPauseDuration);
@@ -143,58 +131,6 @@ public class ErraticAgent : MonoBehaviour, INpc
         _pauseTimer -= Time.deltaTime;
         if (_pauseTimer > 0f) return;
         EnterPatrol();
-    }
-
-    void CheckEgoReaction()
-    {
-        Transform closest = ClosestEgoInRange();
-        if (closest != null && _state != State.Reacting) EnterReaction(closest);
-        if (closest == null && _state == State.Reacting) ExitReaction();
-    }
-
-    void EnterReaction(Transform ego)
-    {
-        _state     = State.Reacting;
-        _nav.isStopped = false;
-        _nav.speed = Random.Range(minSpeed, maxSpeed) * reactionSpeedMultiplier;
-        SetReactionTarget(ego);
-    }
-
-    void UpdateReacting()
-    {
-        Transform closest = ClosestEgoInRange();
-        if (closest == null) { ExitReaction(); return; }
-
-        if (!_nav.pathPending && _nav.remainingDistance < waypointReachedDistance)
-            SetReactionTarget(closest);
-    }
-
-    void SetReactionTarget(Transform ego)
-    {
-        if (ego == null) return;
-        Vector3 dir       = (transform.position - ego.position).normalized * Mathf.Sign(reactionBias);
-        Vector3 candidate = transform.position + dir * startleRadius * 1.5f;
-        TrySetDestination(candidate, startleRadius * 2f);
-    }
-
-    void ExitReaction()
-    {
-        _nav.speed = Random.Range(minSpeed, maxSpeed);
-        EnterPatrol();
-    }
-
-    Transform ClosestEgoInRange()
-    {
-        if (egoVehicles == null) return null;
-        Transform best   = null;
-        float     bestDist = startleRadius;
-        foreach (Transform t in egoVehicles)
-        {
-            if (t == null) continue;
-            float d = Vector3.Distance(transform.position, t.position);
-            if (d < bestDist) { bestDist = d; best = t; }
-        }
-        return best;
     }
 
     bool TrySetDestination(Vector3 candidate, float searchRadius)
@@ -212,9 +148,6 @@ public class ErraticAgent : MonoBehaviour, INpc
 
     void OnDrawGizmosSelected()
     {
-        Gizmos.color = Color.cyan;
-        Gizmos.DrawWireSphere(transform.position, startleRadius);
-
         if (_laneWaypoints == null) return;
         Gizmos.color = Color.yellow;
         for (int i = 0; i < _laneWaypoints.Length - 1; i++)

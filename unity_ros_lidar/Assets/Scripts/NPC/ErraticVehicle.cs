@@ -8,7 +8,7 @@ using UnityEngine;
 //   fixedRoute != null  → follows the ordered lane sequence, then continues randomly
 //   fixedRoute == null  → picks a random NextLane at every junction
 //
-// Reacts to the ego aircraft: pulls over or rushes depending on pullOverOnReaction.
+// Holds at IsHoldingPosition lanes (e.g. runway crossings) until the ego clears.
 public class ErraticVehicle : MonoBehaviour, INpc
 {
     static readonly List<ErraticVehicle> s_All = new();
@@ -29,6 +29,27 @@ public class ErraticVehicle : MonoBehaviour, INpc
             d.y = 0f;
             if (d.sqrMagnitude < r2) return true;
         }
+        return false;
+    }
+
+    // True if any active vehicle (other than 'except') is currently on one of 'lanes' AND within
+    // 'radius' (m) of 'junctionPoint'. Used for intersection right-of-way: a give-way vehicle
+    // holds while a priority lane is occupied near the junction. The radius bounds the conflict
+    // so a vehicle far down a long priority lane doesn't block entry indefinitely.
+    public static bool AnyVehicleNearOnLanes(List<TaxiwayLane> lanes, Vector3 junctionPoint, float radius, ErraticVehicle except)
+    {
+        if (lanes == null || lanes.Count == 0) return false;
+        float r2 = radius * radius;
+
+        foreach (ErraticVehicle v in s_All)
+        {
+            if (v == null || v == except || v._currentLane == null) continue;
+            if (!lanes.Contains(v._currentLane)) continue;
+            Vector3 d = v.transform.position - junctionPoint;
+            d.y = 0f;
+            if (d.sqrMagnitude <= r2) return true;
+        }
+
         return false;
     }
 
@@ -64,8 +85,8 @@ public class ErraticVehicle : MonoBehaviour, INpc
         fixedRoute   != null ? RoutingMode.FixedRoute :
                                RoutingMode.RandomLane;
 
-    public bool   IsReacting  => _reacting;
     public bool   IsStopped   => _stopped;
+    public bool   IsYielding  => _yielding;
     public string CurrentLaneName => _currentLane != null ? _currentLane.name : "none";
     public int    WaypointIndex   => _waypointIndex;
 
@@ -96,11 +117,17 @@ public class ErraticVehicle : MonoBehaviour, INpc
              "counts as 'in my lane'. Wider = vehicles queue from farther to the side.")]
     public float laneHalfWidth = 3f;
 
-    [Header("Ego reaction")]
+    [Header("Ego proximity")]
+    [Tooltip("The ego aircraft. Used only to hold at IsHoldingPosition lanes (runway crossings) " +
+             "until the ego clears. NPCs no longer startle / pull over for the ego.")]
     public Transform airplane;
+    [Tooltip("Distance (m) within which the ego counts as 'nearby' for holding-position lanes.")]
     public float reactionRadius = 30f;
-    [Tooltip("True = pull over and stop when ego approaches; False = rush (speed boost).")]
-    public bool pullOverOnReaction = true;
+
+    [Header("Intersection yielding")]
+    [Tooltip("A vehicle on a priority lane (listed in the current lane's YieldToLanes) within this " +
+             "distance of the junction (m) makes this vehicle hold at the junction entry.")]
+    public float junctionConflictRadius = 20f;
 
     // Set by RouteTrafficSimulator before Initialize() — vehicle follows this lane
     // sequence then continues randomly from the last lane's NextLanes.
@@ -112,7 +139,7 @@ public class ErraticVehicle : MonoBehaviour, INpc
     Vector3     _target;
     float       _stopTimer;
     bool        _stopped;
-    bool        _reacting;
+    bool        _yielding;
     bool        _initialized;
     bool        _shouldDespawn;
 
@@ -135,8 +162,6 @@ public class ErraticVehicle : MonoBehaviour, INpc
 
     void Update()
     {
-        CheckAirplaneReaction();
-
         if (_stopped)
         {
             // While stopped at a holding position, stay stopped as long as ego is near.
@@ -147,6 +172,17 @@ public class ErraticVehicle : MonoBehaviour, INpc
             if (_stopTimer <= 0f) ExitStop();
             return;
         }
+
+        // Intersection right-of-way: hold at the junction entry while a priority lane is occupied.
+        // Unlike a micro-stop this is re-evaluated every frame, so the vehicle proceeds the instant
+        // the conflict clears.
+        if (ShouldYieldAtJunction())
+        {
+            _yielding   = true;
+            _hasLastPos = false;   // suppress the jump warning when we resume moving
+            return;
+        }
+        _yielding = false;
 
         if (_hasLastPos)
         {
@@ -164,7 +200,7 @@ public class ErraticVehicle : MonoBehaviour, INpc
         _lastPos    = transform.position;
         _hasLastPos = true;
 
-        if (!_reacting && Roll(stopProbabilityPerSecond)) EnterStop();
+        if (Roll(stopProbabilityPerSecond)) EnterStop();
     }
 
     // ── Initialization ────────────────────────────────────────────────────────
@@ -175,7 +211,7 @@ public class ErraticVehicle : MonoBehaviour, INpc
         _shouldDespawn = false;
         _speed         = Random.Range(minSpeed, maxSpeed);
         _stopped       = false;
-        _reacting      = false;
+        _yielding      = false;
         _hasLastPos    = false;
         _routeIndex    = 0;
         _waypointIndex = 0;
@@ -231,6 +267,23 @@ public class ErraticVehicle : MonoBehaviour, INpc
             EnterLane(next);
         else
             EnterStop(maxStopDuration); // dead-end: pull over
+    }
+
+    // Intersection right-of-way (explicit lane-priority rule, ported from AWSIM).
+    // Returns true when this vehicle, nearing the end of a give-way lane, must hold because a
+    // priority lane (listed in the current lane's YieldToLanes) is occupied near the junction.
+    bool ShouldYieldAtJunction()
+    {
+        if (_currentLane == null || !_currentLane.HasYieldRule) return false;
+
+        var wps = _currentLane.Waypoints;
+        if (wps == null || wps.Length == 0) return false;
+
+        // Only yield on the final segment — the approach to the junction stop point.
+        if (_waypointIndex < wps.Length - 1) return false;
+
+        Vector3 junction = wps[wps.Length - 1];
+        return AnyVehicleNearOnLanes(_currentLane.YieldToLanes, junction, junctionConflictRadius, this);
     }
 
     TaxiwayLane PickNextLane()
@@ -342,28 +395,7 @@ public class ErraticVehicle : MonoBehaviour, INpc
         return offset * separationStrength;
     }
 
-    // ── Ego reaction ──────────────────────────────────────────────────────────
-
-    void CheckAirplaneReaction()
-    {
-        if (airplane == null) return;
-        bool inRange = Vector3.Distance(transform.position, airplane.position) < reactionRadius;
-
-        if (inRange && !_reacting)
-        {
-            _reacting = true;
-            if (pullOverOnReaction)
-                EnterStop(maxStopDuration * 2f);
-            else
-                _speed = maxSpeed * 1.5f;
-        }
-
-        if (!inRange && _reacting)
-        {
-            _reacting = false;
-            _speed    = Random.Range(minSpeed, maxSpeed);
-        }
-    }
+    // ── Ego proximity (holding positions only) ──────────────────────────────────
 
     bool IsEgoNearby() =>
         airplane != null && Vector3.Distance(transform.position, airplane.position) < reactionRadius;
@@ -424,7 +456,8 @@ public class ErraticVehicle : MonoBehaviour, INpc
         UnityEditor.Handles.Label(
             transform.position + Vector3.up * 2f,
             $"{CurrentRoutingMode}  lane:{CurrentLaneName}  wp:{_waypointIndex}" +
-            (_stopped ? "  [STOPPED]" : "") + (_reacting ? "  [REACTING]" : "") +
+            (_stopped ? "  [STOPPED]" : "") +
+            (_yielding ? "  [YIELDING]" : "") +
             (IsFollowing ? $"  [FOLLOWING gap:{_lastGap:F1}m]" : ""),
             new GUIStyle { normal = { textColor = Color.white }, fontSize = 11 });
 #endif

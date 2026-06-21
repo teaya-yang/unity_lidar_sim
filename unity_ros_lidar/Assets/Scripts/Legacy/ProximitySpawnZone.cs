@@ -126,11 +126,9 @@ public class ProximitySpawnZone : MonoBehaviour
         ErraticAgent agent = go.GetComponent<ErraticAgent>();
         if (agent != null)
         {
-            agent.minSpeed      = minSpeed;
-            agent.maxSpeed      = maxSpeed;
-            agent.startleRadius = startleRadius;
-            agent.reactionBias  = reactionBias;
-            agent.egoVehicles   = new Transform[] { ego };
+            agent.minSpeed = minSpeed;
+            agent.maxSpeed = maxSpeed;
+            // ErraticAgent no longer reacts to the ego. (Legacy spawner — superseded by TrafficManager.)
         }
 
         m_Agents.Add(go);

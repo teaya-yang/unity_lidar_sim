@@ -153,15 +153,8 @@ public class ScenarioManager : MonoBehaviour
         GameObject go = Instantiate(prefab, spawnPos, Quaternion.identity);
         go.name = $"{entry.label}_{index}";
 
-        ErraticAgent agent = go.GetComponent<ErraticAgent>();
-        if (agent != null)
-        {
-            // Speed is kept from the prefab so each type can move at its own pace.
-            // Only scenario-wide reaction settings are applied.
-            agent.startleRadius  = config.startleRadius;
-            agent.reactionBias   = config.reactionBias;
-            agent.egoVehicles    = egoVehicles;
-        }
+        // ErraticAgent no longer reacts to the ego; speed is kept from the prefab.
+        // (Legacy spawner — superseded by TrafficManager.)
 
         ErraticVehicle vehicle = go.GetComponent<ErraticVehicle>();
         if (vehicle != null)

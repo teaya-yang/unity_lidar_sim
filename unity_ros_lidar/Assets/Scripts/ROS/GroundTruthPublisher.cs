@@ -199,7 +199,6 @@ public class GroundTruthPublisher : MonoBehaviour
         var nav = a.GetComponent<UnityEngine.AI.NavMeshAgent>();
         if (nav == null) return "Unknown";
         if (nav.isStopped)                              return "Paused";
-        if (nav.speed > a.maxSpeed * 1.4f)              return "Reacting";
         if (a.HasPatrolPath && nav.remainingDistance > 0.5f) return "Patrolling";
         return "Wandering";
     }
@@ -207,7 +206,7 @@ public class GroundTruthPublisher : MonoBehaviour
     static string GetVehicleState(ErraticVehicle v)
     {
         if (v.IsStopped)   return "Stopped";
-        if (v.IsReacting)  return "Reacting";
+        if (v.IsYielding)  return "Yielding";
         return v.CurrentRoutingMode switch
         {
             ErraticVehicle.RoutingMode.FixedRoute => "RoutePatrol",

@@ -11,6 +11,7 @@ public class TaxiwayLaneEditor : Editor
     SerializedProperty _prevLanesProp;
     SerializedProperty _speedLimitProp;
     SerializedProperty _holdingProp;
+    SerializedProperty _yieldToLanesProp;
 
     // Index of the waypoint currently being dragged (-1 = none)
     int _selectedIndex = -1;
@@ -20,8 +21,9 @@ public class TaxiwayLaneEditor : Editor
         _waypointsProp  = serializedObject.FindProperty("_waypoints");
         _nextLanesProp  = serializedObject.FindProperty("_nextLanes");
         _prevLanesProp  = serializedObject.FindProperty("_prevLanes");
-        _speedLimitProp = serializedObject.FindProperty("_speedLimit");
-        _holdingProp    = serializedObject.FindProperty("_isHoldingPosition");
+        _speedLimitProp   = serializedObject.FindProperty("_speedLimit");
+        _holdingProp      = serializedObject.FindProperty("_isHoldingPosition");
+        _yieldToLanesProp = serializedObject.FindProperty("_yieldToLanes");
     }
 
     // ── Inspector ─────────────────────────────────────────────────────────────
@@ -99,6 +101,10 @@ public class TaxiwayLaneEditor : Editor
         EditorGUILayout.Space(6);
         EditorGUILayout.PropertyField(_nextLanesProp, includeChildren: true);
         EditorGUILayout.PropertyField(_prevLanesProp, includeChildren: true);
+
+        EditorGUILayout.Space(6);
+        EditorGUILayout.LabelField("Intersection right-of-way", EditorStyles.boldLabel);
+        EditorGUILayout.PropertyField(_yieldToLanesProp, includeChildren: true);
 
         serializedObject.ApplyModifiedProperties();
     }

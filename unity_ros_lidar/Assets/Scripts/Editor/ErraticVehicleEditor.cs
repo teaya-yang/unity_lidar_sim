@@ -28,7 +28,7 @@ public class ErraticVehicleEditor : Editor
         EditorGUILayout.LabelField("Current Lane",    v.CurrentLaneName);
         EditorGUILayout.LabelField("Waypoint Index",  v.WaypointIndex.ToString());
         EditorGUILayout.LabelField("Stopped",         v.IsStopped.ToString());
-        EditorGUILayout.LabelField("Reacting to Ego", v.IsReacting.ToString());
+        EditorGUILayout.LabelField("Yielding",        v.IsYielding.ToString());
 
         // Force repaint so values update every frame while selected
         if (Application.isPlaying) Repaint();
