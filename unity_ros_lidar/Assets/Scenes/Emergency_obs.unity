@@ -119,6 +119,69 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1001 &71521664
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1628374747}
+    m_Modifications:
+    - target: {fileID: 1264175369454642909, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_Name
+      value: Velodyne VLP-32C
+      objectReference: {fileID: 0}
+    - target: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 4.821
+      objectReference: {fileID: 0}
+    - target: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 9.91
+      objectReference: {fileID: 0}
+    - target: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 1264175369454642909, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 975117437}
+    - targetCorrespondingSourceObject: {fileID: 1264175369454642909, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 975117436}
+  m_SourcePrefab: {fileID: 100100000, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
 --- !u!1 &75936825
 GameObject:
   m_ObjectHideFlags: 0
@@ -144,14 +207,14 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 75936825}
   m_Enabled: 1
-  serializedVersion: 12
+  serializedVersion: 11
   m_Type: 1
   m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
   m_Intensity: 1
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
-  m_CookieSize2D: {x: 10, y: 10}
+  m_CookieSize: 10
   m_Shadows:
     m_Type: 2
     m_Resolution: -1
@@ -452,8 +515,6 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -475,11 +536,9 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &794405888
 MeshFilter:
@@ -596,8 +655,6 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -619,11 +676,9 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &797209702
 MeshFilter:
@@ -730,6 +785,311 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1760079570}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &975117434 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1264175369454642909, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+  m_PrefabInstance: {fileID: 71521664}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &975117435 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2459352021672942287, guid: b0ebf41f5af66b39290359a0b0acaf4a, type: 3}
+  m_PrefabInstance: {fileID: 71521664}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &975117436
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 975117434}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 311471364af4f993592a33c4315f44d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  topic: /point_cloud
+  frameId: odom
+  intensityFieldName: i
+--- !u!114 &975117437
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 975117434}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62277ad5b6d1cfd2984db58dc79535a4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  AutomaticCaptureHz: 10
+  modelPreset: 3
+  returnMode: 16777220
+  applyDistanceGaussianNoise: 1
+  applyAngularGaussianNoise: 1
+  applyVelocityDistortion: 0
+  simulateBeamDivergence: 0
+  doValidateConfigurationOnStartup: 1
+  configuration:
+    rid: 1920892409844596822
+  outputRestriction:
+    applyRestriction: 0
+    rectangularRestrictionMasks: []
+    enablePeriodicRestriction: 0
+    restrictionPeriod: 1
+    restrictionDutyRate: 0.5
+    enableRestrictionRandomizer: 0
+    minRandomPerdiod: 0
+    maxRandomPerdiod: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 1920892409844596822
+      type: {class: UniformRangeLidarConfiguration, ns: RGLUnityPlugin, asm: Assembly-CSharp}
+      data:
+        _laserArray:
+          centerOfMeasurementLinearOffsetMm: {x: 0, y: 37.34, z: 0}
+          focalDistanceMm: 42.4
+          lasers:
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: 25
+            verticalLinearOffsetMm: 0
+            ringId: 1
+            timeOffset: 0.027648
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -4.2
+            verticalAngularOffsetDeg: 1
+            verticalLinearOffsetMm: 0
+            ringId: 2
+            timeOffset: 0.002304
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: 1.667
+            verticalLinearOffsetMm: 0
+            ringId: 3
+            timeOffset: 0.018432
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: 15.639
+            verticalLinearOffsetMm: 0
+            ringId: 4
+            timeOffset: 0.006912
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: 11.31
+            verticalLinearOffsetMm: 0
+            ringId: 5
+            timeOffset: 0.032256
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: 0
+            verticalLinearOffsetMm: 0
+            ringId: 6
+            timeOffset: 0.01152
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 4.2
+            verticalAngularOffsetDeg: 0.667
+            verticalLinearOffsetMm: 0
+            ringId: 7
+            timeOffset: 0.02304
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: 8.843
+            verticalLinearOffsetMm: 0
+            ringId: 8
+            timeOffset: 0.016128
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: 7.254
+            verticalLinearOffsetMm: 0
+            ringId: 9
+            timeOffset: 0.013824
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -4.2
+            verticalAngularOffsetDeg: -0.333
+            verticalLinearOffsetMm: 0
+            ringId: 10
+            timeOffset: 0.004608
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: 0.333
+            verticalLinearOffsetMm: 0
+            ringId: 11
+            timeOffset: 0.020736
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: 6.148
+            verticalLinearOffsetMm: 0
+            ringId: 12
+            timeOffset: 0.025344
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 4.2
+            verticalAngularOffsetDeg: 5.333
+            verticalLinearOffsetMm: 0
+            ringId: 13
+            timeOffset: 0.009216
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: -1.333
+            verticalLinearOffsetMm: 0
+            ringId: 14
+            timeOffset: 0
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 4.2
+            verticalAngularOffsetDeg: -0.667
+            verticalLinearOffsetMm: 0
+            ringId: 15
+            timeOffset: 0.029952
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: 4
+            verticalLinearOffsetMm: 0
+            ringId: 16
+            timeOffset: 0.03456
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: 4.667
+            verticalLinearOffsetMm: 0
+            ringId: 17
+            timeOffset: 0.01152
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -4.2
+            verticalAngularOffsetDeg: -1.667
+            verticalLinearOffsetMm: 0
+            ringId: 18
+            timeOffset: 0.002304
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: -1
+            verticalLinearOffsetMm: 0
+            ringId: 19
+            timeOffset: 0.027648
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -4.2
+            verticalAngularOffsetDeg: 3.667
+            verticalLinearOffsetMm: 0
+            ringId: 20
+            timeOffset: 0.032256
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 4.2
+            verticalAngularOffsetDeg: 3.333
+            verticalLinearOffsetMm: 0
+            ringId: 21
+            timeOffset: 0.016128
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: -3.333
+            verticalLinearOffsetMm: 0
+            ringId: 22
+            timeOffset: 0.006912
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: -2.333
+            verticalLinearOffsetMm: 0
+            ringId: 23
+            timeOffset: 0.018432
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: 2.667
+            verticalLinearOffsetMm: 0
+            ringId: 24
+            timeOffset: 0.02304
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: 3
+            verticalLinearOffsetMm: 0
+            ringId: 25
+            timeOffset: 0.025344
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: -7
+            verticalLinearOffsetMm: 0
+            ringId: 26
+            timeOffset: 0.013824
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: -4.667
+            verticalLinearOffsetMm: 0
+            ringId: 27
+            timeOffset: 0.03456
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -4.2
+            verticalAngularOffsetDeg: 2.333
+            verticalLinearOffsetMm: 0
+            ringId: 28
+            timeOffset: 0.009216
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 4.2
+            verticalAngularOffsetDeg: 2
+            verticalLinearOffsetMm: 0
+            ringId: 29
+            timeOffset: 0.020736
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: -15
+            verticalLinearOffsetMm: 0
+            ringId: 30
+            timeOffset: 0.004608
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: 1.4
+            verticalAngularOffsetDeg: -10.333
+            verticalLinearOffsetMm: 0
+            ringId: 31
+            timeOffset: 0.029952
+            minRange: 0
+            maxRange: 0
+          - horizontalAngularOffsetDeg: -1.4
+            verticalAngularOffsetDeg: 1.333
+            verticalLinearOffsetMm: 0
+            ringId: 32
+            timeOffset: 0
+            minRange: 0
+            maxRange: 0
+        horizontalResolution: 0.2
+        minHAngle: 0
+        maxHAngle: 360
+        laserArrayCycleTime: 0.055296
+        horizontalBeamDivergence: 0.171887
+        verticalBeamDivergence: 0.0859435
+        noiseParams:
+          angularNoiseType: 0
+          angularNoiseStDev: 0.057295784
+          angularNoiseMean: 0
+          distanceNoiseStDevBase: 0.02
+          distanceNoiseStDevRisePerMeter: 0
+          distanceNoiseMean: 0
+        minRange: 0
+        maxRange: 200
 --- !u!1 &1015213760
 GameObject:
   m_ObjectHideFlags: 0
@@ -805,8 +1165,6 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -828,11 +1186,9 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &1015213764
 MeshFilter:
@@ -842,6 +1198,52 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1015213760}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1037747933
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1037747935}
+  - component: {fileID: 1037747934}
+  m_Layer: 0
+  m_Name: RGLSceneManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1037747934
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1037747933}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5603a893e02b41ffa847870219ef3c3f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  meshSource: 0
+  semanticCategoryDictionaryFile: 
+--- !u!4 &1037747935
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1037747933}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.5030963, y: 4.6710567, z: 10.326373}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1060355120
 GameObject:
   m_ObjectHideFlags: 0
@@ -915,7 +1317,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1266859023}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 04bdebad427f85cfa983188702c5b9d6, type: 3}
   m_Name: 
@@ -1007,6 +1409,7 @@ MonoBehaviour:
     - {fileID: 153120290}
     - {fileID: 622286343}
   minEgoDistance: 20
+  minAgentSpacing: 1.5
   randomizers:
   - {fileID: 1767412349}
   - {fileID: 2069624978}
@@ -1126,6 +1529,7 @@ Transform:
   - {fileID: 1648720294}
   - {fileID: 187434679}
   - {fileID: 1832198846}
+  - {fileID: 975117435}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1648720290
@@ -1521,8 +1925,6 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -1544,11 +1946,9 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &1801487229
 MeshFilter:
@@ -1841,7 +2241,6 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 1060355121}
-  - {fileID: 1628374747}
   - {fileID: 1266859026}
   - {fileID: 1796375711}
   - {fileID: 75936827}
@@ -1853,3 +2252,5 @@ SceneRoots:
   - {fileID: 2069624979}
   - {fileID: 1767412350}
   - {fileID: 2137291264}
+  - {fileID: 1628374747}
+  - {fileID: 1037747935}
