@@ -641,6 +641,8 @@ GameObject:
   - component: {fileID: 400012}
   - component: {fileID: 1776606020819464024}
   - component: {fileID: -3762056464945662614}
+  - component: {fileID: 7558491518070027469}
+  - component: {fileID: 4447033817820057659}
   m_Layer: 0
   m_Name: Vehicle_Truck_color01_separate
   m_TagString: Untagged
@@ -709,9 +711,8 @@ MonoBehaviour:
   rotationSpeed: 3
   waypointReachedDistance: 2
   wanderRadius: 60
+  frontIsNegativeZ: 1
   despawnAtRouteEnd: 1
-  stopProbabilityPerSecond: 0.04
-  minStopDuration: 1
   maxStopDuration: 5
   separationRadius: 6
   separationStrength: 3
@@ -722,3 +723,40 @@ MonoBehaviour:
   reactionRadius: 30
   junctionConflictRadius: 20
   fixedRoute: []
+--- !u!208 &7558491518070027469
+NavMeshObstacle:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100014}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Shape: 1
+  m_Extents: {x: 1.5, y: 1.5, z: 4.5}
+  m_MoveThreshold: 0.1
+  m_Carve: 0
+  m_CarveOnlyStationary: 1
+  m_Center: {x: 0, y: 2, z: 0.1}
+  m_TimeToStationary: 0.5
+--- !u!65 &4447033817820057659
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100014}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 3, y: 3, z: 9}
+  m_Center: {x: 0, y: 2, z: 0.1}
