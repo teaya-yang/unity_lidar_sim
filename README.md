@@ -53,6 +53,19 @@ For ROS:
   * under "By topic", select "/point_cloud/PointCloud2".
   * Back to the "Display" panel, change the point cloud size to 0.05 m.
 
+## Using the RGL Lidar Plugin
+
+The [RGL](https://github.com/RobotecAI/RobotecGPULidar) plugin should only work with a 22.04 machine with GPU. For specific requirements, check out the [AWSIM tutorial](https://autowarefoundation.github.io/AWSIM/GettingStarted/QuickStartDemo/).
+
+* Starting with something that already uses the CPU-based plugin, first disable the Point Cloud Publisher under 'ROS Publishers' in that scene.
+* Place the sensor prefab into the hierarchy like shown below. The prefab can be found in the 'Velodyne VLP-32' folder. Also add the 'Rgl tcp publihser' script to the prefab, and configure the two scripts. Set the sensor model to VLP-32C, and the frame id to 'odom' since it's how the transform is currently published.
+  
+  <img width="388" height="194" alt="image" src="https://github.com/user-attachments/assets/ba837a38-6133-42b1-8a67-4a5ea0fcded4" />
+  <img width="530" height="340" alt="image" src="https://github.com/user-attachments/assets/34e6b5c8-efe2-4b8a-b26d-7bdc8573c1da" />
+* Also add an empty game object and attach the scene manager script to it.
+  <img width="533" height="287" alt="image" src="https://github.com/user-attachments/assets/d4f53163-8df6-40ed-8526-f64660e25724" />
+
+
 
 ## Data collection pipeline
 
