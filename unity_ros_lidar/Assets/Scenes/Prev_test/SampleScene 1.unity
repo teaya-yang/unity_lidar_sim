@@ -292,7 +292,38 @@ Transform:
   m_GameObject: {fileID: 35649849}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -7.9, y: -0, z: 172.9}
+  m_LocalPosition: {x: 2.1, y: -0, z: 136.7}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &351830359
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 351830360}
+  m_Layer: 0
+  m_Name: Conflict
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &351830360
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 351830359}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.2, y: 0, z: 63.6}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -395,66 +426,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
---- !u!1 &863036430
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 863036432}
-  - component: {fileID: 863036431}
-  m_Layer: 0
-  m_Name: Traffic manager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &863036431
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 863036430}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ff68c73863a8083da97acad31b87eb74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TrafficManager
-  egoVehicles: []
-  _seed: 0
-  _maxNpcCount: 40
-  _spawnDistanceToEgo: 0
-  _cullingDistance: 1000000
-  _cullingHz: 2
-  _randomSims:
-  - enabled: 1
-    prefabs:
-    - {fileID: 985866007}
-    spawnableLanes:
-    - {fileID: 944200617}
-    spawnCountLimit: 2
-    spawnClearance: 0
-  _routeSims: []
-  _navMeshSims: []
---- !u!4 &863036432
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 863036430}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -79.6746, y: -0.00003, z: 85.84603}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &933108274
 GameObject:
   m_ObjectHideFlags: 0
@@ -568,61 +539,6 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 31629467}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &944200616
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 944200618}
-  - component: {fileID: 944200617}
-  m_Layer: 0
-  m_Name: taxilane
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &944200617
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 944200616}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d1329deb064dc0ac69fea1c666a32c0b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TaxiwayLane
-  _waypoints:
-  - {x: 44.64839, y: 0, z: 71.88307}
-  - {x: -53.477837, y: 0, z: 56.691956}
-  - {x: -73.46575, y: 0, z: 89.53107}
-  - {x: 43.834587, y: 0, z: 118.72341}
-  - {x: -70.11108, y: 0, z: 141.83398}
-  _nextLanes: []
-  _prevLanes: []
-  _speedLimit: 5
-  _isHoldingPosition: 0
-  _yieldToLanes: []
---- !u!4 &944200618
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 944200616}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -121.2, y: 0, z: 25.4}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &963194225
 GameObject:
@@ -741,6 +657,7 @@ GameObject:
   m_Component:
   - component: {fileID: 985866009}
   - component: {fileID: 985866010}
+  - component: {fileID: 985866011}
   - component: {fileID: 985866012}
   m_Layer: 0
   m_Name: Ambulance_root
@@ -758,7 +675,7 @@ Transform:
   m_GameObject: {fileID: 985866007}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0.7071068, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: -127.1, y: 0, z: 40.5}
+  m_LocalPosition: {x: 61.4, y: 0, z: 67.6}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -780,13 +697,13 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &985866012
+--- !u!114 &985866011
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -795,26 +712,40 @@ MonoBehaviour:
   m_GameObject: {fileID: 985866007}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6680789e3f721232b9c4c229c25a9316, type: 3}
+  m_Script: {fileID: 11500000, guid: ad48351f2e742f06b8d63526bfa8db85, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Vehicle
-  minSpeed: 4
-  maxSpeed: 12
-  rotationSpeed: 3
-  waypointReachedDistance: 2
-  wanderRadius: 60
-  frontIsNegativeZ: 0
-  despawnAtRouteEnd: 0
-  maxStopDuration: 5
-  separationRadius: 6
-  separationStrength: 3
-  followDistance: 12
-  stopDistance: 4
-  laneHalfWidth: 3
-  airplane: {fileID: 0}
-  reactionRadius: 30
-  junctionConflictRadius: 20
-  fixedRoute: []
+  m_EditorClassIdentifier: Assembly-CSharp::IncursionAgentController
+  crossDirection: {x: -1, y: 0, z: 0}
+  crossSpeed: 6
+  faceTravelDirection: 1
+  frontIsNegativeZ: 1
+--- !u!54 &985866012
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 985866007}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 1
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1001 &1000396420
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -861,7 +792,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4473652613745982, guid: e88383b28fa9049408fb72235350effe, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4473652613745982, guid: e88383b28fa9049408fb72235350effe, type: 3}
       propertyPath: m_LocalRotation.x
@@ -869,7 +800,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4473652613745982, guid: e88383b28fa9049408fb72235350effe, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4473652613745982, guid: e88383b28fa9049408fb72235350effe, type: 3}
       propertyPath: m_LocalRotation.z
@@ -881,7 +812,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4473652613745982, guid: e88383b28fa9049408fb72235350effe, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4473652613745982, guid: e88383b28fa9049408fb72235350effe, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -890,6 +821,7 @@ PrefabInstance:
     m_RemovedComponents:
     - {fileID: 34820872403075945, guid: e88383b28fa9049408fb72235350effe, type: 3}
     - {fileID: -5394690387771280385, guid: e88383b28fa9049408fb72235350effe, type: 3}
+    - {fileID: 1143836346744944922, guid: e88383b28fa9049408fb72235350effe, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents:
@@ -1108,6 +1040,9 @@ MonoBehaviour:
   dSafe: 6
   spawnLateralRange: 0
   spawnHeadingRange: 0
+  incursionController: {fileID: 985866011}
+  conflictPoint: {fileID: 351830360}
+  defaultIncursionDt: 0
   maxEpisodeSeconds: 60
 --- !u!114 &1218424479
 MonoBehaviour:
@@ -1799,5 +1734,4 @@ SceneRoots:
   - {fileID: 31629467}
   - {fileID: 1218424474}
   - {fileID: 35649850}
-  - {fileID: 863036432}
-  - {fileID: 944200618}
+  - {fileID: 351830360}

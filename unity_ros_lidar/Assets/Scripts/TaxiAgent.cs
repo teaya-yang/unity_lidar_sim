@@ -252,10 +252,13 @@ public class TaxiAgent : Unity.MLAgents.Agent
     // ── Collision detection ────────────────────────────────────────────────
     void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Obstacle") || other.CompareTag("Vehicle"))
-        {
-            _collided = true;
-        }
+        if (other.gameObject == gameObject) return;
+
+        // Ignore the ground plane and static environment meshes
+        if (other.gameObject.name == "Plane" || other.gameObject.isStatic) return;
+
+        _collided = true;
+        Debug.LogWarning($"[TaxiAgent] COLLISION with '{other.gameObject.name}' at t={_episodeTime:F2}s", this);
     }
 
     // ── Heuristic — keyboard control for testing without Python ───────────

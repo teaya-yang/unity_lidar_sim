@@ -374,12 +374,21 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20):
         env.reset()
         decision_steps, terminal_steps = env.get_steps(behavior_name)
 
+        prev_x   = None
+        ep_steps = 0
+
         while True:
             if len(decision_steps) == 0:
-                # Episode ended — terminal_steps contains the final step info
                 break
 
             obs = decision_steps.obs[0][0]           # shape (10,)
+
+            # Detect episode reset: x_ego jumps backward (Unity called EndEpisode)
+            x_now = float(obs[0])
+            if prev_x is not None and x_now < prev_x - 10.0 and ep_steps > 10:
+                break   # Unity reset mid-step — treat as episode end
+            prev_x   = x_now
+            ep_steps += 1
             s, obs_xy, obs_v, goal_dx = obs_to_state(obs)
 
             # ── Step 7 coordinate-verification debug ────────────────────────
@@ -400,7 +409,7 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20):
             dist  = float(np.sqrt(max(0., h_val + D_SAFE**2)))
             ep_log["min_h"]    = min(ep_log["min_h"], h_val)
             ep_log["min_dist"] = min(ep_log["min_dist"], dist)
-            ep_log["steps"]   += 1
+            ep_log["steps"] = ep_steps
 
             if cbf_engaged:
                 print(f"  [CBF] t={ep_log['steps']*DT:.1f}s  "

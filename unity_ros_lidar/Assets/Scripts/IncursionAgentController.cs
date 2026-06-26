@@ -26,6 +26,10 @@ public class IncursionAgentController : MonoBehaviour
     [Tooltip("If true, face the travel direction. Untick to keep authored rotation.")]
     public bool faceTravelDirection = true;
 
+    [Tooltip("Tick if the model's visual front points down -Z (like the ambulance/NPC cars). " +
+             "Untick for models whose front is +Z.")]
+    public bool frontIsNegativeZ = true;
+
     bool    _moving;
     Vector3 _dir;
     float   _speed;
@@ -48,7 +52,10 @@ public class IncursionAgentController : MonoBehaviour
         _moving = true;
 
         if (faceTravelDirection && _dir.sqrMagnitude > 1e-6f)
-            transform.rotation = Quaternion.LookRotation(_dir, Vector3.up);
+        {
+            Vector3 faceDir = frontIsNegativeZ ? -_dir : _dir;
+            transform.rotation = Quaternion.LookRotation(faceDir, Vector3.up);
+        }
     }
 
     public void StopCrossing() => _moving = false;
