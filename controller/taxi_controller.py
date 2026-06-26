@@ -6,27 +6,34 @@ Connects via the ML-Agents Python API, runs MPPI + HOCBF-QP, and sends
 [a, delta] actions back to Unity each decision step.
 
 Observation contract (must match TaxiAgent.cs CollectObservations order):
-  obs[0]  x_ego   — forward position along taxiway (Unity Z) [m]
-  obs[1]  y_ego   — lateral offset (Unity X) [m]
-  obs[2]  theta   — heading error from +Z axis [rad], normalised to [-π, π]
-  obs[3]  v       — speed [m/s]
-  obs[4]  obs_dx  — obstacle forward separation (Unity Z) [m]
-  obs[5]  obs_dy  — obstacle lateral separation (Unity X) [m]
-  obs[6]  obs_vx  — obstacle velocity along Z [m/s]
-  obs[7]  obs_vy  — obstacle velocity along X [m/s]
-  obs[8]  goal_dx — distance to goal along Z [m]
-  obs[9]  cbf_h   — barrier value h = dist²-D²  (logging only)
+  obs[0]   x_ego    — forward position along taxiway (Unity Z) [m]
+  obs[1]   y_ego    — lateral offset (Unity X) [m]
+  obs[2]   theta    — heading error from +Z axis [rad], normalised to [-pi, pi]
+  obs[3]   v        — speed [m/s]
+  obs[4]   obs0_dx  — nearest obstacle: forward separation (Unity Z) [m]
+  obs[5]   obs0_dy  — nearest obstacle: lateral separation (Unity X) [m]
+  obs[6]   obs0_vx  — nearest obstacle: velocity along Z [m/s]
+  obs[7]   obs0_vy  — nearest obstacle: velocity along X [m/s]
+  obs[8]   obs1_dx  — 2nd obstacle (zero-padded if absent)
+  obs[9]   obs1_dy
+  obs[10]  obs1_vx
+  obs[11]  obs1_vy
+  obs[12]  obs2_dx  — 3rd obstacle (zero-padded if absent)
+  obs[13]  obs2_dy
+  obs[14]  obs2_vx
+  obs[15]  obs2_vy
+  obs[16]  goal_dx  — distance to goal along Z [m]
+  obs[17]  cbf_h    — barrier value h = dist^2 - D^2 of nearest obstacle (logging)
 
 Action contract:
-  act[0]  a_cmd     — acceleration [m/s²], clipped to [A_MIN, A_MAX]
-  act[1]  delta_cmd — steering [rad],      clipped to [-DELTA_LIM, DELTA_LIM]
+  act[0]  a_cmd     — acceleration [m/s^2], clipped to [A_MIN, A_MAX]
+  act[1]  delta_cmd — steering [rad],       clipped to [-DELTA_LIM, DELTA_LIM]
 
 COORDINATE NOTE:
   Python baseline uses X=forward, Y=lateral.
-  Unity scene uses Z=forward (taxiway), X=lateral (airplane frontIsNegativeZ=false).
-  obs_to_state() is the single bridge: it maps Unity obs indices to Python state
-  convention. Do NOT touch MPPI/CBF logic if only the axis mapping changes — fix
-  obs_to_state() only.
+  Unity scene uses Z=forward (taxiway), X=lateral.
+  obs_to_state() is the single bridge. Do NOT touch MPPI/CBF logic if only the
+  axis mapping changes — fix obs_to_state() only.
 """
 
 import numpy as np
@@ -61,7 +68,11 @@ SIG_D     = 0.12         # noise std for steering samples
 # MPPI stage costs
 W_LAT, W_HEAD, W_V, W_CTRL = 3.0, 6.0, 1.2, 0.05
 W_OBS, W_OFF, W_PROG        = 12.0, 200.0, 0.4
-BIG = 300.0              # CBF handles hard safety — MPPI just needs a soft nudge
+BIG = 300.0
+
+# Number of obstacles packed in the observation vector (must match TaxiAgent K_OBS)
+K_OBS    = 3
+OBS_SIZE = 4 + K_OBS * 4 + 2   # 18: ego(4) + K_OBS*4 + goal_dx(1) + cbf_h(1)
 
 rng = np.random.default_rng(42)
 
@@ -70,39 +81,50 @@ rng = np.random.default_rng(42)
 
 def obs_to_state(obs: np.ndarray):
     """
-    Map the Unity observation vector to the Python state representation.
+    Unpack the Unity observation vector.
 
-    Python state convention: s = [x_forward, y_lateral, theta, v]
-    Obstacle:  obs_xy = [x_forward, y_lateral] (absolute world position)
-               obs_v  = [vx_forward, vy_lateral]
+    Returns
+    -------
+    s        : np.ndarray shape (4,)  — [x_fwd, y_lat, theta, v]
+    obstacles: list of (obs_xy, obs_v) — up to K_OBS entries, padded slots omitted
+    goal_dx  : float
 
-    Unity sends SEPARATIONS in obs[4]/obs[5] (obstacle minus ego), so we
-    recover absolute obstacle position as ego position + separation.
-
-    If you change the axis mapping in TaxiAgent.cs, update ONLY this function.
+    A padded slot has obs_dy == 999 (sentinel from TaxiAgent zero-padding).
+    We skip those so MPPI/CBF only sees real obstacles.
     """
-    x_ego  = float(obs[0])   # Unity Z
-    y_ego  = float(obs[1])   # Unity X
-    theta  = float(obs[2])   # yaw, normalised [-π, π]
-    v      = float(obs[3])
-    obs_dx = float(obs[4])   # obstacle forward separation
-    obs_dy = float(obs[5])   # obstacle lateral separation
-    obs_vx = float(obs[6])   # obstacle forward velocity
-    obs_vy = float(obs[7])   # obstacle lateral velocity
-    goal_dx = float(obs[8])
+    x_ego   = float(obs[0])
+    y_ego   = float(obs[1])
+    theta   = float(obs[2])
+    v       = float(obs[3])
+    goal_dx = float(obs[16])
 
-    s      = np.array([x_ego, y_ego, theta, v])
-    obs_xy = np.array([x_ego + obs_dx, y_ego + obs_dy])
-    obs_v  = np.array([obs_vx, obs_vy])
-    return s, obs_xy, obs_v, goal_dx
+    s = np.array([x_ego, y_ego, theta, v])
+
+    obstacles = []
+    for i in range(K_OBS):
+        base   = 4 + i * 4
+        dx     = float(obs[base + 0])
+        dy     = float(obs[base + 1])
+        vx_obs = float(obs[base + 2])
+        vy_obs = float(obs[base + 3])
+
+        # Skip zero-padded slots (dy == 999 sentinel)
+        if abs(dy) > 900:
+            continue
+
+        obs_xy = np.array([x_ego + dx, y_ego + dy])
+        obs_v  = np.array([vx_obs, vy_obs])
+        obstacles.append((obs_xy, obs_v))
+
+    return s, obstacles, goal_dx
 
 
 # ── MPPI ─────────────────────────────────────────────────────────────────────
 
-def mppi(s0, mean, obs_xy, obs_v, goal_dx):
+def mppi(s0, mean, obstacles, goal_dx):
     """
-    Sample K_MPPI rollouts around 'mean' control sequence.
-    Returns (u_nom, new_mean) where u_nom is the next action to apply.
+    Sample K_MPPI rollouts. Handles multiple obstacles: cost is summed over all.
+    Returns (u_nom, new_mean).
     """
     noise = rng.normal(0, [SIG_A, SIG_D], (K_MPPI, H_MPPI, 2))
     na    = mean + noise
@@ -126,20 +148,21 @@ def mppi(s0, mean, obs_xy, obs_v, goal_dx):
         cost += W_CTRL * (na[:, k, 0]**2 + 4. * na[:, k, 1]**2)
         cost += np.where(np.abs(y) > W_HALF, W_OFF * (np.abs(y) - W_HALF)**2, 0.)
 
-        obs_pred = obs_xy + obs_v * (k + 1) * DT
-        d = np.hypot(st[:, 0] - obs_pred[0], st[:, 1] - obs_pred[1])
-        cost += np.where(d < D_INFL, W_OBS * (D_INFL - d)**2, 0.)
-        cost += np.where(d < D_SAFE, BIG, 0.)
+        # Sum obstacle costs over all active obstacles
+        for obs_xy, obs_v in obstacles:
+            obs_pred = obs_xy + obs_v * (k + 1) * DT
+            d = np.hypot(st[:, 0] - obs_pred[0], st[:, 1] - obs_pred[1])
+            cost += np.where(d < D_INFL, W_OBS * (D_INFL - d)**2, 0.)
+            cost += np.where(d < D_SAFE, BIG, 0.)
 
-    # Remaining-distance proxy: penalise rollouts that don't close on the goal
     cost += W_PROG * (goal_dx - (st[:, 0] - s0[0]))
 
     w   = np.exp(-(cost - cost.min()) / LAMBDA)
     w  /= w.sum()
-    opt = (w[:, None, None] * na).sum(axis=0)   # (H_MPPI, 2)
+    opt = (w[:, None, None] * na).sum(axis=0)
 
     u_nom    = opt[0].copy()
-    new_mean = np.vstack([opt[1:], opt[-1]])     # shift horizon by one step
+    new_mean = np.vstack([opt[1:], opt[-1]])
     return u_nom, new_mean
 
 
@@ -147,15 +170,8 @@ def mppi(s0, mean, obs_xy, obs_v, goal_dx):
 
 def hocbf_constraint(s, u_nom, obs_xy, obs_v):
     """
-    Compute the HOCBF linear constraint row [A_cbf] and right-hand side b_cbf
-    for the QP:  A_cbf @ u ≥ b_cbf
-    where u = [a, delta].
-
-    h     = dist² - D_SAFE²
-    ḣ     = 2(dx·rel_vx + dy·rel_vy)
-    ḧ_nom is the second derivative of h evaluated at u_nom.
-
-    HOCBF (second-order): ḧ + (α₁+α₂)ḣ + α₁α₂h ≥ 0
+    Compute one HOCBF constraint row for a single obstacle.
+    Returns (A_row, b_row) for the QP inequality A @ u >= b.
     """
     x, y, th, v  = s
     a_nom  = float(np.clip(u_nom[0], A_MIN, A_MAX))
@@ -175,13 +191,11 @@ def hocbf_constraint(s, u_nom, obs_xy, obs_v):
     sec2d   = 1. + tand**2
     thdot_n = v / L * tand
 
-    # ḧ terms
     hh_kin = 2. * (rel_vx**2 + rel_vy**2)
-    hh_th  = 2.*dx*(-v*np.sin(th)*thdot_n) + 2.*dy*( v*np.cos(th)*thdot_n)
+    hh_th  = 2.*dx*(-v*np.sin(th)*thdot_n) + 2.*dy*(v*np.cos(th)*thdot_n)
     hh_a   = (2.*dx*np.cos(th) + 2.*dy*np.sin(th)) * a_nom
     hh_nom = hh_kin + hh_th + hh_a
 
-    # Gradient of ḧ w.r.t. u = [a, delta]
     dHH_da  = 2.*dx*np.cos(th) + 2.*dy*np.sin(th)
     dthd_dd = v / L * sec2d
     dHH_dd  = 2.*dx*(-v*np.sin(th))*dthd_dd + 2.*dy*(v*np.cos(th))*dthd_dd
@@ -192,53 +206,53 @@ def hocbf_constraint(s, u_nom, obs_xy, obs_v):
     return np.array([dHH_da, dHH_dd]), rhs
 
 
-def cbf_qp(s, u_nom, obs_xy, obs_v):
+def cbf_qp(s, u_nom, obstacles):
     """
-    Solve the safety QP:
-        min  (u - u_nom)ᵀ W (u - u_nom)
-        s.t. A_cbf @ u ≥ b_cbf   (HOCBF safety constraint)
-             A_MIN ≤ a ≤ A_MAX
-             |delta| ≤ DELTA_LIM
+    Solve the safety QP with one constraint row per obstacle:
+        min  (u - u_nom)^T W (u - u_nom)
+        s.t. A_cbf[i] @ u >= b_cbf[i]  for each obstacle i
+             A_MIN <= a <= A_MAX
+             |delta| <= DELTA_LIM
 
-    Returns (u_cmd, cbf_engaged) where cbf_engaged is True when the
-    safety filter overrode the nominal action.
+    Returns (u_cmd, cbf_engaged).
     """
-    a_nom  = float(np.clip(u_nom[0], A_MIN, A_MAX))
-    d_nom  = float(np.clip(u_nom[1], -DELTA_LIM, DELTA_LIM))
-    u_n    = np.array([a_nom, d_nom])
+    a_nom = float(np.clip(u_nom[0], A_MIN, A_MAX))
+    d_nom = float(np.clip(u_nom[1], -DELTA_LIM, DELTA_LIM))
+    u_n   = np.array([a_nom, d_nom])
 
-    W = np.diag([1., ALPHA_W])   # weight acceleration vs steering deviation
-    c = W @ u_n                  # linear term: minimise (u-u_n)ᵀ W (u-u_n)
+    W = np.diag([1., ALPHA_W])
+    c = W @ u_n
 
-    A_cbf, b_cbf = hocbf_constraint(s, u_nom, obs_xy, obs_v)
+    # Box constraints: a >= A_MIN, a <= A_MAX, delta >= -DELTA_LIM, delta <= DELTA_LIM
+    C_box = np.array([[ 1., 0.], [-1., 0.], [0.,  1.], [0., -1.]]).T   # (2, 4)
+    b_box = np.array([A_MIN, -A_MAX, -DELTA_LIM, -DELTA_LIM])
 
-    # quadprog convention: C @ u ≥ b
-    # Stack: [CBF, a≥A_MIN, a≤A_MAX, delta≥-DELTA_LIM, delta≤DELTA_LIM]
-    C = np.column_stack([A_cbf,
-                         [ 1., 0.], [-1., 0.],
-                         [ 0., 1.], [ 0.,-1.]])
-    b = np.array([b_cbf, A_MIN, -A_MAX, -DELTA_LIM, -DELTA_LIM])
+    if obstacles:
+        cbf_rows = []
+        cbf_rhs  = []
+        for obs_xy, obs_v in obstacles:
+            row, rhs = hocbf_constraint(s, u_nom, obs_xy, obs_v)
+            cbf_rows.append(row)
+            cbf_rhs.append(rhs)
+        C_cbf = np.array(cbf_rows).T          # (2, n_obs)
+        b_cbf = np.array(cbf_rhs)
+        C = np.hstack([C_cbf, C_box])          # (2, n_obs + 4)
+        b = np.concatenate([b_cbf, b_box])
+    else:
+        C = C_box
+        b = b_box
 
     try:
-        u_star   = quadprog.solve_qp(W, c, C, b, 0)[0]
-        engaged  = bool(np.linalg.norm(u_star - u_n) > 1e-3)
+        u_star  = quadprog.solve_qp(W, c, C, b, 0)[0]
+        engaged = bool(np.linalg.norm(u_star - u_n) > 1e-3)
         return u_star, engaged
     except Exception:
-        # QP infeasible — apply maximum braking as a safe fallback
         return np.array([A_MIN, d_nom]), True
 
 
 # ── System identification ─────────────────────────────────────────────────────
 
 def identify_bicycle_model(env, behavior_name, n_steps=200):
-    """
-    Drive the aircraft at fixed throttle for n_steps to measure Unity's actual
-    acceleration response. Prints a warning if the measured value deviates
-    significantly from the commanded value.
-
-    In kinematic mode (TaxiAgent sets velocity directly) this should match
-    exactly — the check is most useful if you later switch to force-based.
-    """
     print("[SysID] Probing bicycle dynamics...")
     decision_steps, _ = env.get_steps(behavior_name)
     speeds = []
@@ -262,8 +276,8 @@ def identify_bicycle_model(env, behavior_name, n_steps=200):
 
     if len(speeds) > 2:
         empirical = (speeds[-1] - speeds[0]) / (len(speeds) * DT)
-        print(f"[SysID] Commanded a={A_MAX*0.5:.2f} m/s²,  "
-              f"measured accel≈{empirical:.3f} m/s²")
+        print(f"[SysID] Commanded a={A_MAX*0.5:.2f} m/s^2, "
+              f"measured accel≈{empirical:.3f} m/s^2")
         if abs(empirical - A_MAX * 0.5) > 0.2 * A_MAX * 0.5:
             print("[SysID] WARNING: >20% mismatch — check Fixed Timestep or "
                   "ApplyBicycleDynamics in TaxiAgent.cs")
@@ -273,54 +287,43 @@ def identify_bicycle_model(env, behavior_name, n_steps=200):
 
 # ── Scenario sweep ────────────────────────────────────────────────────────────
 
-# Encounter geometry is parameterized by a single variable: the incursion agent's
-# time-to-conflict offset Δt [s]. Δt=0 means the airplane and the crosser reach the
-# conflict point simultaneously (worst case). The dangerous band is roughly
-# Δt ∈ [-DT_SPAN, +DT_SPAN]; outside it they miss naturally.
-DT_SPAN     = 3.0        # half-width of the swept Δt band [s]
-JITTER_DT   = 0.15       # seeded per-episode Δt jitter [s]
-SPEED_JIT   = 0.10       # ±10% ambulance speed jitter
-BASE_SEED   = 1234       # sweep reproducibility seed
+DT_SPAN   = 3.0
+JITTER_DT = 0.15
+SPEED_JIT = 0.10
+BASE_SEED = 1234
 
 
-def make_scenarios(n_episodes, base_seed=BASE_SEED):
+def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_difficulty=1.0):
     """
     Build a reproducible list of per-episode scenario parameter dicts.
 
-    Layer 1 — deterministic Δt grid over [-DT_SPAN, +DT_SPAN] for coverage of the
-              dangerous encounter band (same every run → regression-friendly).
-    Layer 2 — seeded jitter on Δt and ambulance speed for off-grid robustness.
+    Each dict is pushed to Unity via EnvironmentParametersChannel before env.reset().
+    Keys:
+      incursion_dt    — Δt offset for the primary (agent[0]) incursion [s]
+      ambulance_speed — crossing speed for agent[0] [m/s]
+      difficulty      — [0, 1] curriculum difficulty sent to ScenarioManager
 
-    Each dict maps directly to ML-Agents EnvironmentParameters keys consumed by
-    TaxiAgent.OnEpisodeBegin.
+    min_difficulty / max_difficulty clamp the ramp so you can test a specific
+    difficulty band. E.g. min_difficulty=0.85 forces 3-agent Erratic scenarios.
     """
     grid = np.linspace(-DT_SPAN, DT_SPAN, n_episodes)
     scenarios = []
     for i, dt in enumerate(grid):
         r = np.random.default_rng(base_seed + i)
+        t = i / max(1, n_episodes - 1)   # 0 → 1
+        difficulty = float(min_difficulty + t * (max_difficulty - min_difficulty))
         scenarios.append({
             "incursion_dt":    float(dt + r.uniform(-JITTER_DT, JITTER_DT)),
             "ambulance_speed": float(5.0 * (1.0 + r.uniform(-SPEED_JIT, SPEED_JIT))),
-            # spawn_lateral left unset → TaxiAgent uses its own spawnLateralRange noise
+            "difficulty":      difficulty,
         })
     return scenarios
 
 
 # ── Main control loop ─────────────────────────────────────────────────────────
 
-def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20):
-    """
-    Connect to Unity (Editor in Play mode, or a built executable) and run the
-    MPPI + HOCBF-QP controller for n_episodes.
-
-    Args:
-        unity_exec_path: path to built Unity .x86_64 / .exe.
-                         Pass None to connect to the Unity Editor (must be in
-                         Play mode before running this script).
-        port:            ML-Agents communication port (default 5004).
-        run_sysid:       run bicycle system-ID step before the episode loop.
-        n_episodes:      number of episodes to run.
-    """
+def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
+        min_difficulty=0.0, max_difficulty=1.0):
     print(f"[Controller] Connecting to Unity on port {port} ...")
     env_params = EnvironmentParametersChannel()
     env = UnityEnvironment(
@@ -340,36 +343,37 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20):
 
     obs_size = spec.observation_specs[0].shape[0]
     act_size = spec.action_spec.continuous_size
-    assert obs_size == 10, (
-        f"Expected 10 observations, got {obs_size}. "
-        "Check TaxiAgent.cs CollectObservations and BehaviorParameters."
+    assert obs_size == OBS_SIZE, (
+        f"Expected {OBS_SIZE} observations, got {obs_size}. "
+        f"Set BehaviorParameters Vector Observations = {OBS_SIZE} in Unity Inspector "
+        f"and ensure TaxiAgent.cs K_OBS = {K_OBS}."
     )
     assert act_size == 2, (
-        f"Expected 2 continuous actions, got {act_size}. "
-        "Check TaxiAgent.cs BehaviorParameters."
+        f"Expected 2 continuous actions, got {act_size}."
     )
 
     if run_sysid:
         identify_bicycle_model(env, behavior_name)
         env.reset()
 
-    scenarios     = make_scenarios(n_episodes)
+    scenarios     = make_scenarios(n_episodes, min_difficulty=min_difficulty,
+                                              max_difficulty=max_difficulty)
     episode_stats = []
 
     for ep in range(n_episodes):
-        mean    = np.zeros((H_MPPI, 2))
-        sc      = scenarios[ep]
-        ep_log  = {"min_h": np.inf, "min_dist": np.inf,
-                   "collided": False, "reached": False, "steps": 0,
-                   "incursion_dt": sc["incursion_dt"]}
+        mean   = np.zeros((H_MPPI, 2))
+        sc     = scenarios[ep]
+        ep_log = {"min_h": np.inf, "min_dist": np.inf,
+                  "collided": False, "reached": False, "steps": 0,
+                  "incursion_dt": sc["incursion_dt"],
+                  "difficulty": sc["difficulty"]}
 
-        # Push this episode's scenario parameters BEFORE reset so TaxiAgent.
-        # OnEpisodeBegin reads them when Unity rebuilds the episode.
         for key, val in sc.items():
             env_params.set_float_parameter(key, val)
 
-        print(f"\n[Ep {ep+1:3d}] scenario  Δt={sc['incursion_dt']:+.2f}s  "
-              f"v_amb={sc['ambulance_speed']:.2f} m/s")
+        print(f"\n[Ep {ep+1:3d}] Δt={sc['incursion_dt']:+.2f}s  "
+              f"v_amb={sc['ambulance_speed']:.2f} m/s  "
+              f"difficulty={sc['difficulty']:.2f}")
 
         env.reset()
         decision_steps, terminal_steps = env.get_steps(behavior_name)
@@ -381,41 +385,39 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20):
             if len(decision_steps) == 0:
                 break
 
-            obs = decision_steps.obs[0][0]           # shape (10,)
-
-            # Detect episode reset: x_ego jumps backward (Unity called EndEpisode)
+            obs  = decision_steps.obs[0][0]          # shape (OBS_SIZE,)
             x_now = float(obs[0])
+
+            # Detect episode reset: x_ego jumps backward
             if prev_x is not None and x_now < prev_x - 10.0 and ep_steps > 10:
-                break   # Unity reset mid-step — treat as episode end
+                break
             prev_x   = x_now
             ep_steps += 1
-            s, obs_xy, obs_v, goal_dx = obs_to_state(obs)
 
-            # ── Step 7 coordinate-verification debug ────────────────────────
+            s, obstacles, goal_dx = obs_to_state(obs)
+
             if ep_log["steps"] % 20 == 0:
+                n_obs_str = f"{len(obstacles)} obstacle(s)"
                 print(f"[DEBUG] x={s[0]:.1f} y={s[1]:.2f} th={s[2]:.3f} "
-                      f"v={s[3]:.2f} obs_xy={obs_xy}  goal_dx={goal_dx:.1f}")
+                      f"v={s[3]:.2f}  {n_obs_str}  goal_dx={goal_dx:.1f}")
 
-            # MPPI nominal action
-            u_nom, mean = mppi(s, mean, obs_xy, obs_v, goal_dx)
-
-            # HOCBF-QP safety filter
-            u_cmd, cbf_engaged = cbf_qp(s, u_nom, obs_xy, obs_v)
+            u_nom, mean = mppi(s, mean, obstacles, goal_dx)
+            u_cmd, cbf_engaged = cbf_qp(s, u_nom, obstacles)
             a_cmd     = float(np.clip(u_cmd[0], A_MIN, A_MAX))
             delta_cmd = float(np.clip(u_cmd[1], -DELTA_LIM, DELTA_LIM))
 
-            # Logging
-            h_val = float(obs[9])
+            # Log nearest obstacle distance
+            h_val = float(obs[17])
             dist  = float(np.sqrt(max(0., h_val + D_SAFE**2)))
             ep_log["min_h"]    = min(ep_log["min_h"], h_val)
             ep_log["min_dist"] = min(ep_log["min_dist"], dist)
-            ep_log["steps"] = ep_steps
+            ep_log["steps"]    = ep_steps
 
             if cbf_engaged:
-                print(f"  [CBF] t={ep_log['steps']*DT:.1f}s  "
-                      f"h={h_val:.1f}  dist={dist:.2f}m  "
-                      f"a_nom={u_nom[0]:.2f}→a_cmd={a_cmd:.2f}  "
-                      f"δ_nom={u_nom[1]:.3f}→δ_cmd={delta_cmd:.3f}")
+                print(f"  [CBF] t={ep_steps*DT:.1f}s  h={h_val:.1f}  dist={dist:.2f}m  "
+                      f"a_nom={u_nom[0]:.2f}→{a_cmd:.2f}  "
+                      f"d_nom={u_nom[1]:.3f}→{delta_cmd:.3f}  "
+                      f"n_obs={len(obstacles)}")
 
             action = ActionTuple(
                 continuous=np.array([[a_cmd, delta_cmd]], dtype=np.float32)
@@ -430,6 +432,7 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20):
 
         verdict = "COLLISION" if ep_log["collided"] else "safe"
         print(f"[Ep {ep+1:3d}] Δt={ep_log['incursion_dt']:+.2f}s  "
+              f"diff={ep_log['difficulty']:.2f}  "
               f"steps={ep_log['steps']:4d}  "
               f"min_dist={ep_log['min_dist']:5.2f}m  "
               f"min_h={ep_log['min_h']:8.2f}  → {verdict}")
@@ -442,28 +445,33 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20):
     print(f"Collision rate : {col}/{n} = {col/n:.1%}")
     print(f"Mean min_dist  : {np.mean([e['min_dist'] for e in episode_stats]):.2f} m")
     print(f"Worst min_dist : {np.min([e['min_dist'] for e in episode_stats]):.2f} m "
-          f"(target ≥ {D_SAFE:.1f} m)")
+          f"(target >= {D_SAFE:.1f} m)")
     print(f"Worst min_h    : {np.min([e['min_h'] for e in episode_stats]):.2f} "
-          "(target ≥ 0)")
+          "(target >= 0)")
 
-    # Per-Δt breakdown — shows which encounter geometries (if any) stress the barrier
-    print("\n  Δt[s]   min_dist[m]   min_h     result")
+    print("\n  Δt[s]  diff  min_dist[m]   min_h     result")
     for e in sorted(episode_stats, key=lambda d: d["incursion_dt"]):
-        print(f"  {e['incursion_dt']:+5.2f}   {e['min_dist']:8.2f}   "
-              f"{e['min_h']:8.2f}   {'COLLISION' if e['collided'] else 'safe'}")
+        print(f"  {e['incursion_dt']:+5.2f}  {e['difficulty']:.2f}  "
+              f"{e['min_dist']:8.2f}   {e['min_h']:8.2f}   "
+              f"{'COLLISION' if e['collided'] else 'safe'}")
     return episode_stats
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--exec",     default=None,
-                   help="Path to Unity build executable (omit to connect to Editor)")
-    p.add_argument("--port",     default=5004,  type=int)
-    p.add_argument("--sysid",    default=True,  type=lambda x: x.lower() == "true")
-    p.add_argument("--episodes", default=20,    type=int)
+    p.add_argument("--exec",           default=None)
+    p.add_argument("--port",           default=5004,  type=int)
+    p.add_argument("--sysid",          default=True,  type=lambda x: x.lower() == "true")
+    p.add_argument("--episodes",       default=20,    type=int)
+    p.add_argument("--min-difficulty", default=0.0,   type=float,
+                   help="Floor of the difficulty ramp (0-1). 0.85 forces 3-agent Erratic.")
+    p.add_argument("--max-difficulty", default=1.0,   type=float,
+                   help="Ceiling of the difficulty ramp (0-1).")
     args = p.parse_args()
 
     run(unity_exec_path=args.exec if args.exec != "None" else None,
         port=args.port,
         run_sysid=args.sysid,
-        n_episodes=args.episodes)
+        n_episodes=args.episodes,
+        min_difficulty=args.min_difficulty,
+        max_difficulty=args.max_difficulty)
