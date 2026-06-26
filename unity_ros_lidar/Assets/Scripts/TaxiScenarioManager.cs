@@ -1,13 +1,12 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 /// <summary>
 /// Centralized per-episode scenario configurator.
 ///
-/// Owns a pool of IncursionAgentControllers and activates/positions them each
-/// episode based on a difficulty scalar [0, 1] pushed by the Python training loop
-/// via EnvironmentParameters ("difficulty").
+/// SETUP: assign one incursionPrefab (a GameObject with IncursionAgentController,
+/// Rigidbody, and Collider). The manager pre-instantiates maxAgents copies in Awake()
+/// and manages their lifecycle — you never place ambulances manually in the scene.
 ///
 /// Difficulty mapping
 /// ──────────────────
@@ -19,99 +18,170 @@ using UnityEngine;
 ///
 /// Spawn geometry
 /// ──────────────
-/// The aircraft travels along +Z at aircraftSpeed. Its TTC to the conflict point is
-///   ttc_ego = (conflict.z - spawn.z) / aircraftSpeed
-/// Each incursion agent i is placed so it reaches the conflict point at
-///   ttc_ego + incursionDt_i
-/// where incursionDt_i is a per-agent offset set by the Python side channel or
-/// defaulted from the Inspector.
-///
-/// Call ResetEpisode(difficulty, aircraftSpeed, aircraftTransform, incursionDtOffset)
-/// from TaxiAgent.OnEpisodeBegin. Then read ActiveAgents for the observation pack.
+/// Each agent is placed so it reaches effectiveConflict at (egoTtc + dtOffset).
+/// The conflict point position is jittered each episode along Z.
+/// Crossing direction (left/right) is randomised or controlled by Python side channel.
 /// </summary>
 public class TaxiScenarioManager : MonoBehaviour
 {
-    [Header("Agent pool — assign all IncursionAgentControllers in the scene")]
-    public List<IncursionAgentController> agentPool = new List<IncursionAgentController>();
+    [Header("Prefab — assign ONE ambulance/vehicle prefab")]
+    [Tooltip("Must have IncursionAgentController, a Rigidbody (kinematic), and a Collider.")]
+    public GameObject incursionPrefab;
+
+    [Tooltip("Maximum number of incursion agents ever active simultaneously. " +
+             "This many copies are pre-instantiated at startup.")]
+    public int maxAgents = 3;
 
     [Header("Scene reference")]
     [Tooltip("Empty GameObject where incursion paths cross the taxiway centreline.")]
     public Transform conflictPoint;
 
     [Header("Defaults (overridden by Python side-channel per episode)")]
-    public float defaultDifficulty    = 0.0f;
-    public float defaultIncursionDt   = 0.0f;   // applied to agent[0]; others get ±offset
+    public float defaultDifficulty     = 0.0f;
+    public float defaultIncursionDt    = 0.0f;
     public float defaultAmbulanceSpeed = 5.0f;
 
-    // ── read-only state ────────────────────────────────────────────────────────
+    [Header("Spawn randomisation")]
+    [Tooltip("Max Z-axis shift of the conflict point each episode [m].")]
+    public float conflictZJitter = 20f;
+    [Tooltip("Randomly flip the crossing direction (left vs right) each episode.")]
+    public bool  randomiseCrossDirection = true;
+    [Tooltip("Per-agent lateral offset jitter [m] so agents don't stack on the same line.")]
+    public float lateralSpread = 3f;
+    [Tooltip("Speed variation between agents (fraction of base speed).")]
+    public float speedVariation = 0.05f;
+
+    // ── read-only ──────────────────────────────────────────────────────────────
     public IReadOnlyList<IncursionAgentController> ActiveAgents => _active;
 
+    // ── internal pool ──────────────────────────────────────────────────────────
+    readonly List<IncursionAgentController> _pool   = new List<IncursionAgentController>();
     readonly List<IncursionAgentController> _active = new List<IncursionAgentController>();
 
-    // ── per-episode configuration ──────────────────────────────────────────────
+    // ── Unity lifecycle ────────────────────────────────────────────────────────
+
+    void Awake()
+    {
+        if (incursionPrefab == null)
+        {
+            Debug.LogError("[TaxiScenarioManager] incursionPrefab is not assigned.", this);
+            return;
+        }
+
+        for (int i = 0; i < maxAgents; i++)
+        {
+            GameObject go = Instantiate(incursionPrefab, Vector3.zero, Quaternion.identity, transform);
+            go.name = $"IncursionAgent_{i}";
+            go.SetActive(false);
+
+            var ctrl = go.GetComponent<IncursionAgentController>();
+            if (ctrl == null)
+            {
+                Debug.LogError($"[TaxiScenarioManager] Prefab has no IncursionAgentController.", this);
+                Destroy(go);
+                continue;
+            }
+
+            // Wire the shared conflict point so StopGo mode knows where to stop
+            ctrl.conflictPoint = conflictPoint;
+            _pool.Add(ctrl);
+        }
+
+        Debug.Log($"[TaxiScenarioManager] Pre-instantiated {_pool.Count} incursion agents.");
+    }
+
+    // ── per-episode reset ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// Configure and reset all incursion agents for a new episode.
+    /// Called by TaxiAgent.OnEpisodeBegin. Activates 1-maxAgents agents from the
+    /// pool, assigns trajectory modes and spawn positions based on difficulty.
     ///
-    /// Parameters
-    /// ----------
-    /// difficulty      [0, 1] — controls how many agents are active and which
-    ///                          trajectory modes are used.
-    /// aircraftSpeed   used to compute time-to-conflict for spawn placement.
-    /// aircraftTransform  the aircraft's current (reset) transform, used to
-    ///                    measure distance to conflictPoint.
-    /// baseDt          primary Δt offset [s] for agent[0] (from side channel).
-    /// ambulanceSpeed  crossing speed for agent[0]; subsequent agents offset slightly.
+    /// conflictZOffset — Z shift [m] for this episode (NaN → Unity random).
+    /// crossDirSign    — +1/-1 to force crossing direction (0 → Unity random).
     /// </summary>
     public void ResetEpisode(float difficulty,
                              float aircraftSpeed,
                              Transform aircraftTransform,
                              float baseDt,
-                             float ambulanceSpeed)
+                             float ambulanceSpeed,
+                             float conflictZOffset = float.NaN,
+                             float crossDirSign    = 0f)
     {
         _active.Clear();
 
-        if (agentPool == null || agentPool.Count == 0 || conflictPoint == null)
+        if (_pool.Count == 0 || conflictPoint == null)
         {
-            Debug.LogWarning("[ScenarioManager] agentPool is empty or conflictPoint not assigned.");
+            Debug.LogWarning("[TaxiScenarioManager] Pool empty or conflictPoint missing.");
             return;
         }
 
-        // Disable all agents first
-        foreach (var a in agentPool)
+        // Disable all pooled agents
+        foreach (var a in _pool)
             a.gameObject.SetActive(false);
 
-        // Decide how many agents to activate and their modes
+        // ── Effective conflict point (Z-jittered) ─────────────────────────────
+        float zOffset = float.IsNaN(conflictZOffset)
+            ? Random.Range(-conflictZJitter, conflictZJitter)
+            : conflictZOffset;
+        Vector3 effectiveConflict = conflictPoint.position + new Vector3(0f, 0f, zOffset);
+
+        // Update StopGo conflict reference on all pool agents
+        foreach (var a in _pool)
+            a.conflictPoint = conflictPoint;   // keep original; offset applied to spawn calc
+
+        // ── Crossing direction ────────────────────────────────────────────────
+        float dirSign = crossDirSign != 0f
+            ? Mathf.Sign(crossDirSign)
+            : (randomiseCrossDirection && Random.value < 0.5f ? -1f : 1f);
+
+        // ── Layout: how many agents and which modes ───────────────────────────
         int nActive;
         TrajectoryMode[] modes;
-        ResolveLayout(difficulty, agentPool.Count, out nActive, out modes);
-        nActive = Mathf.Min(nActive, agentPool.Count);
+        ResolveLayout(difficulty, _pool.Count, out nActive, out modes);
 
         float egoTtc = Mathf.Max(0f,
-            (conflictPoint.position.z - aircraftTransform.position.z) / Mathf.Max(1f, aircraftSpeed));
+            (effectiveConflict.z - aircraftTransform.position.z) / Mathf.Max(1f, aircraftSpeed));
 
         for (int i = 0; i < nActive; i++)
         {
-            var agent = agentPool[i];
+            var agent = _pool[i];
             agent.gameObject.SetActive(true);
 
-            // Each subsequent agent gets a small additional Δt offset so they
-            // stagger through the conflict zone rather than arriving together.
-            float dtOffset  = baseDt + i * 1.5f;
-            float spd       = ambulanceSpeed * (1f + i * 0.05f); // slight speed variation
+            // Stagger Δt so agents arrive at different times
+            float dtOffset = baseDt + i * 1.5f;
 
-            // Spawn position: agent starts far enough back that it reaches
-            // conflictPoint at (egoTtc + dtOffset) seconds from now.
-            Vector3 dir   = agent.CrossDirectionNormalized;
-            Vector3 start = conflictPoint.position - dir * spd * (egoTtc + dtOffset);
+            // Slight speed variation per agent
+            float spd = ambulanceSpeed * (1f + i * speedVariation);
+
+            // Alternate crossing direction per agent (agent 0 goes dirSign, 1 goes -dirSign, …)
+            float agentDirSign = (i % 2 == 0) ? dirSign : -dirSign;
+
+            // Base crossing direction from the agent's own crossDirection, flipped by sign
+            Vector3 baseDir = agent.CrossDirectionNormalized * agentDirSign;
+
+            // Lateral spread: offset spawn perpendicular to crossing so agents don't stack
+            Vector3 lateralAxis = Vector3.Cross(baseDir, Vector3.up).normalized;
+            float   lateralOff  = (i - (nActive - 1) * 0.5f) * lateralSpread;
+
+            Vector3 spawnBase = effectiveConflict - baseDir * spd * (egoTtc + dtOffset);
+            Vector3 start     = spawnBase + lateralAxis * lateralOff;
 
             agent.trajectoryMode = modes[i];
+
+            // Override crossDirection on the controller so it matches agentDirSign
+            // (the controller normalises it internally)
+            agent.crossDirection = baseDir;
+
             agent.ResetCrossing(start, spd);
             _active.Add(agent);
         }
+
+        Debug.Log($"[TaxiScenarioManager] reset: diff={difficulty:F2} n={nActive} " +
+                  $"modes=[{string.Join(",", modes)}] " +
+                  $"zOff={zOffset:+.1f} dir={dirSign:+0}");
     }
 
-    // ── difficulty → layout table ──────────────────────────────────────────────
+    // ── difficulty → layout ────────────────────────────────────────────────────
 
     static void ResolveLayout(float d, int poolSize,
                               out int nActive, out TrajectoryMode[] modes)
@@ -142,7 +212,6 @@ public class TaxiScenarioManager : MonoBehaviour
             modes   = new[] { TrajectoryMode.Straight, TrajectoryMode.Curved, TrajectoryMode.Erratic };
         }
 
-        // Clamp to actual pool size
         nActive = Mathf.Min(nActive, poolSize);
         if (modes.Length > nActive)
         {
@@ -152,14 +221,18 @@ public class TaxiScenarioManager : MonoBehaviour
         }
     }
 
-    // ── Gizmo: draw conflict-point radius ─────────────────────────────────────
+    // ── Gizmos ────────────────────────────────────────────────────────────────
+
     void OnDrawGizmosSelected()
     {
         if (conflictPoint == null) return;
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(conflictPoint.position, 6f);
         Gizmos.color = Color.yellow;
-        Gizmos.DrawLine(conflictPoint.position - Vector3.right * 30f,
-                        conflictPoint.position + Vector3.right * 30f);
+        Gizmos.DrawLine(conflictPoint.position - Vector3.right * 40f,
+                        conflictPoint.position + Vector3.right * 40f);
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawLine(conflictPoint.position - Vector3.forward * conflictZJitter,
+                        conflictPoint.position + Vector3.forward * conflictZJitter);
     }
 }

@@ -59,6 +59,13 @@ ALPHA1    = 1.8          # HOCBF first-order gain
 ALPHA2    = 1.8          # HOCBF second-order gain
 ALPHA_W   = 6.0          # QP acceleration vs steering weight
 
+# ── Realistic kinematic extensions — must match TaxiAgent.cs inspector values ─
+DRAG_COEFF        = 0.04   # aerodynamic + rolling drag [1/s]
+ACCEL_TAU         = 0.5    # thrust/brake lag time constant [s]
+MAX_STEER_RATE    = 0.6    # nose-wheel steering rate limit [rad/s]
+STEER_ROLLOFF_SPD = 15.0   # speed at which steering authority starts rolling off [m/s]
+STEER_ROLLOFF_MIN = 0.25   # minimum steering authority fraction at high speed
+
 H_MPPI    = 25           # planning horizon (steps)
 K_MPPI    = 1500         # rollout samples
 LAMBDA    = 1.0          # MPPI temperature
@@ -79,15 +86,18 @@ rng = np.random.default_rng(42)
 
 # ── Observation unpacking ────────────────────────────────────────────────────
 
-def obs_to_state(obs: np.ndarray):
+def obs_to_state(obs: np.ndarray, prev_delta: float = 0.0, prev_accel: float = 0.0):
     """
     Unpack the Unity observation vector.
 
     Returns
     -------
-    s        : np.ndarray shape (4,)  — [x_fwd, y_lat, theta, v]
+    s        : np.ndarray shape (6,)  — [x_fwd, y_lat, theta, v, delta_actual, accel_actual]
     obstacles: list of (obs_xy, obs_v) — up to K_OBS entries, padded slots omitted
     goal_dx  : float
+
+    delta_actual and accel_actual are NOT sent as observations (Unity owns them internally).
+    We carry them as Python-side state across steps, passed in as prev_delta / prev_accel.
 
     A padded slot has obs_dy == 999 (sentinel from TaxiAgent zero-padding).
     We skip those so MPPI/CBF only sees real obstacles.
@@ -98,7 +108,7 @@ def obs_to_state(obs: np.ndarray):
     v       = float(obs[3])
     goal_dx = float(obs[16])
 
-    s = np.array([x_ego, y_ego, theta, v])
+    s = np.array([x_ego, y_ego, theta, v, prev_delta, prev_accel])
 
     obstacles = []
     for i in range(K_OBS):
@@ -121,9 +131,49 @@ def obs_to_state(obs: np.ndarray):
 
 # ── MPPI ─────────────────────────────────────────────────────────────────────
 
+def _rollout_step(st, a_cmd, delta_cmd):
+    """
+    One-step realistic bicycle dynamics for MPPI rollouts.
+    st columns: [x, y, theta, v, delta_actual, accel_actual]
+    Mirrors TaxiAgent.ApplyBicycleDynamics exactly.
+    """
+    v            = st[:, 3]
+    delta_actual = st[:, 4]
+    accel_actual = st[:, 5]
+
+    # 1+2: rate-limited, speed-dependent steering
+    speed_frac    = np.clip(v / max(STEER_ROLLOFF_SPD, 1e-3), 0., 1.)
+    eff_limit     = DELTA_LIM * (1. - speed_frac * (1. - STEER_ROLLOFF_MIN))
+    delta_target  = np.clip(delta_cmd, -eff_limit, eff_limit)
+    max_delta_step = MAX_STEER_RATE * DT
+    delta_new     = delta_actual + np.clip(delta_target - delta_actual,
+                                           -max_delta_step, max_delta_step)
+
+    # 3: first-order acceleration lag
+    a_clamped  = np.clip(a_cmd, A_MIN, A_MAX)
+    if ACCEL_TAU > 1e-3:
+        accel_new = accel_actual + (a_clamped - accel_actual) * (DT / ACCEL_TAU)
+    else:
+        accel_new = a_clamped
+
+    # 4: drag + speed integration
+    drag  = DRAG_COEFF * v
+    v_new = np.maximum(0., v + (accel_new - drag) * DT)
+
+    # Bicycle geometry
+    dtheta = v_new / L * np.tan(delta_new) * DT
+    x_new  = st[:, 0] + v_new * np.cos(st[:, 2]) * DT
+    y_new  = st[:, 1] + v_new * np.sin(st[:, 2]) * DT
+    th_new = st[:, 2] + dtheta
+
+    st_new = np.stack([x_new, y_new, th_new, v_new, delta_new, accel_new], axis=1)
+    return st_new
+
+
 def mppi(s0, mean, obstacles, goal_dx):
     """
-    Sample K_MPPI rollouts. Handles multiple obstacles: cost is summed over all.
+    Sample K_MPPI rollouts with realistic 6D state dynamics.
+    s0 shape: (6,) — [x, y, theta, v, delta_actual, accel_actual]
     Returns (u_nom, new_mean).
     """
     noise = rng.normal(0, [SIG_A, SIG_D], (K_MPPI, H_MPPI, 2))
@@ -135,11 +185,7 @@ def mppi(s0, mean, obstacles, goal_dx):
     st   = np.tile(s0, (K_MPPI, 1)).astype(float)
 
     for k in range(H_MPPI):
-        v = st[:, 3]
-        st[:, 0] += v * np.cos(st[:, 2]) * DT
-        st[:, 1] += v * np.sin(st[:, 2]) * DT
-        st[:, 2] += v / L * np.tan(na[:, k, 1]) * DT
-        st[:, 3]  = np.maximum(0., v + na[:, k, 0] * DT)
+        st = _rollout_step(st, na[:, k, 0], na[:, k, 1])
 
         y, th, vv = st[:, 1], st[:, 2], st[:, 3]
         cost += W_LAT  * y**2
@@ -148,7 +194,6 @@ def mppi(s0, mean, obstacles, goal_dx):
         cost += W_CTRL * (na[:, k, 0]**2 + 4. * na[:, k, 1]**2)
         cost += np.where(np.abs(y) > W_HALF, W_OFF * (np.abs(y) - W_HALF)**2, 0.)
 
-        # Sum obstacle costs over all active obstacles
         for obs_xy, obs_v in obstacles:
             obs_pred = obs_xy + obs_v * (k + 1) * DT
             d = np.hypot(st[:, 0] - obs_pred[0], st[:, 1] - obs_pred[1])
@@ -287,10 +332,11 @@ def identify_bicycle_model(env, behavior_name, n_steps=200):
 
 # ── Scenario sweep ────────────────────────────────────────────────────────────
 
-DT_SPAN   = 3.0
-JITTER_DT = 0.15
-SPEED_JIT = 0.10
-BASE_SEED = 1234
+DT_SPAN        = 3.0
+JITTER_DT      = 0.15
+SPEED_JIT      = 0.10
+BASE_SEED      = 1234
+CONFLICT_Z_MAX = 20.0   # max Z shift of conflict point along taxiway [m]
 
 
 def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_difficulty=1.0):
@@ -313,9 +359,11 @@ def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_diff
         t = i / max(1, n_episodes - 1)   # 0 → 1
         difficulty = float(min_difficulty + t * (max_difficulty - min_difficulty))
         scenarios.append({
-            "incursion_dt":    float(dt + r.uniform(-JITTER_DT, JITTER_DT)),
-            "ambulance_speed": float(5.0 * (1.0 + r.uniform(-SPEED_JIT, SPEED_JIT))),
-            "difficulty":      difficulty,
+            "incursion_dt":      float(dt + r.uniform(-JITTER_DT, JITTER_DT)),
+            "ambulance_speed":   float(5.0 * (1.0 + r.uniform(-SPEED_JIT, SPEED_JIT))),
+            "difficulty":        difficulty,
+            "conflict_z_offset": float(r.uniform(-CONFLICT_Z_MAX, CONFLICT_Z_MAX)),
+            "cross_dir_sign":    float(r.choice([-1.0, 1.0])),
         })
     return scenarios
 
@@ -373,19 +421,23 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
 
         print(f"\n[Ep {ep+1:3d}] Δt={sc['incursion_dt']:+.2f}s  "
               f"v_amb={sc['ambulance_speed']:.2f} m/s  "
-              f"difficulty={sc['difficulty']:.2f}")
+              f"diff={sc['difficulty']:.2f}  "
+              f"zOff={sc['conflict_z_offset']:+.1f}m  "
+              f"dir={'L' if sc['cross_dir_sign'] < 0 else 'R'}")
 
         env.reset()
         decision_steps, terminal_steps = env.get_steps(behavior_name)
 
-        prev_x   = None
-        ep_steps = 0
+        prev_x        = None
+        ep_steps      = 0
+        delta_actual  = 0.0   # tracked Python-side to feed into MPPI state
+        accel_actual  = 0.0
 
         while True:
             if len(decision_steps) == 0:
                 break
 
-            obs  = decision_steps.obs[0][0]          # shape (OBS_SIZE,)
+            obs   = decision_steps.obs[0][0]          # shape (OBS_SIZE,)
             x_now = float(obs[0])
 
             # Detect episode reset: x_ego jumps backward
@@ -394,17 +446,30 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
             prev_x   = x_now
             ep_steps += 1
 
-            s, obstacles, goal_dx = obs_to_state(obs)
+            s, obstacles, goal_dx = obs_to_state(obs, delta_actual, accel_actual)
 
             if ep_log["steps"] % 20 == 0:
                 n_obs_str = f"{len(obstacles)} obstacle(s)"
                 print(f"[DEBUG] x={s[0]:.1f} y={s[1]:.2f} th={s[2]:.3f} "
-                      f"v={s[3]:.2f}  {n_obs_str}  goal_dx={goal_dx:.1f}")
+                      f"v={s[3]:.2f} δ={s[4]:.3f} a_act={s[5]:.2f}  "
+                      f"{n_obs_str}  goal_dx={goal_dx:.1f}")
 
             u_nom, mean = mppi(s, mean, obstacles, goal_dx)
-            u_cmd, cbf_engaged = cbf_qp(s, u_nom, obstacles)
+            u_cmd, cbf_engaged = cbf_qp(s[:4], u_nom, obstacles)  # CBF uses [x,y,th,v] only
             a_cmd     = float(np.clip(u_cmd[0], A_MIN, A_MAX))
             delta_cmd = float(np.clip(u_cmd[1], -DELTA_LIM, DELTA_LIM))
+
+            # Advance Python-side kinematic state to match what Unity will compute
+            v = s[3]
+            speed_frac   = min(v / max(STEER_ROLLOFF_SPD, 1e-3), 1.0)
+            eff_limit    = DELTA_LIM * (1.0 - speed_frac * (1.0 - STEER_ROLLOFF_MIN))
+            delta_target = float(np.clip(delta_cmd, -eff_limit, eff_limit))
+            delta_actual = delta_actual + float(np.clip(
+                delta_target - delta_actual, -MAX_STEER_RATE * DT, MAX_STEER_RATE * DT))
+            if ACCEL_TAU > 1e-3:
+                accel_actual += (float(np.clip(a_cmd, A_MIN, A_MAX)) - accel_actual) * (DT / ACCEL_TAU)
+            else:
+                accel_actual = float(np.clip(a_cmd, A_MIN, A_MAX))
 
             # Log nearest obstacle distance
             h_val = float(obs[17])

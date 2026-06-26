@@ -35,12 +35,25 @@ public class TaxiAgent : Unity.MLAgents.Agent
 {
     // ── Aircraft parameters ────────────────────────────────────────────────────
 
-    [Header("Aircraft parameters — must match Python DT and L")]
-    public float wheelbase    = 6.0f;
-    public float maxAccel     = 1.5f;
-    public float maxBrake     = 4.0f;
-    public float maxSteer     = 0.5f;
-    public float desiredSpeed = 8.0f;
+    [Header("Aircraft parameters — must match Python DT, L, and dynamics constants")]
+    public float wheelbase    = 6.0f;   // nose-to-main-gear distance [m]
+    public float maxAccel     = 1.5f;   // max thrust accel [m/s²]
+    public float maxBrake     = 4.0f;   // max brake decel [m/s²]
+    public float maxSteer     = 0.5f;   // nose-wheel max angle at zero speed [rad]
+    public float desiredSpeed = 8.0f;   // target taxi speed [m/s]
+
+    [Header("Realistic kinematic extensions")]
+    [Tooltip("Aerodynamic + rolling drag coefficient [1/s]. v_dot -= dragCoeff * v.")]
+    public float dragCoeff = 0.04f;     // at 8 m/s gives 0.32 m/s² passive deceleration
+    [Tooltip("First-order time constant for thrust/brake lag [s]. 0 = instant.")]
+    public float accelTau  = 0.5f;      // ~0.5s engine/brake response
+    [Tooltip("Max nose-wheel steering rate [rad/s].")]
+    public float maxSteerRate = 0.6f;   // ~34 deg/s
+    [Tooltip("Speed above which nose-wheel authority rolls off [m/s]. " +
+             "At rolloffSpeed, max steer = maxSteer * steerRolloffMin.")]
+    public float steerRolloffSpeed = 15f;
+    [Tooltip("Minimum steering authority fraction at high speed (0-1).")]
+    public float steerRolloffMin   = 0.25f;
 
     // ── Scene references ───────────────────────────────────────────────────────
 
@@ -85,6 +98,10 @@ public class TaxiAgent : Unity.MLAgents.Agent
     Vector3   _spawnPos;
     int       _episodeIndex;
 
+    // Realistic kinematic state
+    float   _deltaActual;  // current nose-wheel angle [rad] (rate-limited)
+    float   _accelActual;  // current acceleration [m/s²] (lag-filtered)
+
     // Legacy single-agent velocity estimation
     Vector3 _obsPosPrev;
     Vector3 _obsVel;
@@ -103,9 +120,11 @@ public class TaxiAgent : Unity.MLAgents.Agent
 
     public override void OnEpisodeBegin()
     {
-        _collided    = false;
-        _speed       = desiredSpeed;
-        _episodeTime = 0f;
+        _collided     = false;
+        _speed        = desiredSpeed;
+        _deltaActual  = 0f;
+        _accelActual  = 0f;
+        _episodeTime  = 0f;
 
         var ep = Academy.Instance.EnvironmentParameters;
 
@@ -125,7 +144,9 @@ public class TaxiAgent : Unity.MLAgents.Agent
             float incursionDt    = ep.GetWithDefault("incursion_dt",    scenarioManager.defaultIncursionDt);
             float ambulanceSpeed = ep.GetWithDefault("ambulance_speed", scenarioManager.defaultAmbulanceSpeed);
 
-            scenarioManager.ResetEpisode(difficulty, desiredSpeed, transform, incursionDt, ambulanceSpeed);
+            float conflictZOffset = ep.GetWithDefault("conflict_z_offset", float.NaN);
+            float crossDirSign    = ep.GetWithDefault("cross_dir_sign",    0f);
+            scenarioManager.ResetEpisode(difficulty, desiredSpeed, transform, incursionDt, ambulanceSpeed, conflictZOffset, crossDirSign);
         }
         // ── Legacy single-agent path ──────────────────────────────────────────
         else if (incursionController != null && conflictPoint != null)
@@ -252,18 +273,41 @@ public class TaxiAgent : Unity.MLAgents.Agent
             EndEpisode();
     }
 
-    // ── Bicycle kinematic model ────────────────────────────────────────────────
+    // ── Bicycle kinematic model (with realistic extensions) ──────────────────────
+    //
+    // Four additions over the simple model:
+    //   1. Steering rate limiter  — nose wheel moves at most maxSteerRate rad/s
+    //   2. Speed-dependent limit  — authority rolls off linearly above steerRolloffSpeed
+    //   3. Acceleration lag       — first-order filter with time constant accelTau
+    //   4. Aerodynamic drag       — passive deceleration proportional to speed
 
-    void ApplyBicycleDynamics(float a, float delta)
+    void ApplyBicycleDynamics(float a_cmd, float delta_cmd)
     {
-        a     = Mathf.Clamp(a,     -maxBrake, maxAccel);
-        delta = Mathf.Clamp(delta, -maxSteer, maxSteer);
+        float dt = Time.fixedDeltaTime;
 
-        _speed = Mathf.Max(0f, _speed + a * Time.fixedDeltaTime);
+        // 1 + 2 — rate-limited, speed-dependent nose-wheel steering
+        float speedFraction  = Mathf.Clamp01(_speed / Mathf.Max(1f, steerRolloffSpeed));
+        float effectiveLimit = maxSteer * Mathf.Lerp(1f, steerRolloffMin, speedFraction);
+        float deltaTarget    = Mathf.Clamp(delta_cmd, -effectiveLimit, effectiveLimit);
+        float maxDelta       = maxSteerRate * dt;
+        _deltaActual = Mathf.MoveTowards(_deltaActual, deltaTarget, maxDelta);
 
-        float dTheta = (_speed / wheelbase) * Mathf.Tan(delta) * Time.fixedDeltaTime;
+        // 3 — first-order acceleration lag  (τ·ȧ + a = a_cmd)
+        float a_clamped  = Mathf.Clamp(a_cmd, -maxBrake, maxAccel);
+        if (accelTau > 1e-3f)
+            _accelActual += (a_clamped - _accelActual) * (dt / accelTau);
+        else
+            _accelActual  = a_clamped;
+
+        // 4 — aerodynamic + rolling drag (acts opposite to motion)
+        float drag    = dragCoeff * _speed;
+        float v_dot   = _accelActual - drag;
+        _speed        = Mathf.Max(0f, _speed + v_dot * dt);
+
+        // Bicycle yaw rate: dθ/dt = (v/L) * tan(δ)
+        float dTheta = (_speed / wheelbase) * Mathf.Tan(_deltaActual) * dt;
         transform.Rotate(Vector3.up, dTheta * Mathf.Rad2Deg);
-        transform.position += transform.forward * (_speed * Time.fixedDeltaTime);
+        transform.position += transform.forward * (_speed * dt);
     }
 
     // ── Reward ────────────────────────────────────────────────────────────────
