@@ -89,6 +89,7 @@ public class Agent : MonoBehaviour, INpc
 
     void UpdatePatrolling()
     {
+        if (!_nav.isOnNavMesh) return;
         if (!_nav.pathPending && _nav.remainingDistance < waypointReachedDistance)
             AdvanceWaypoint();
 

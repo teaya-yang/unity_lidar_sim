@@ -1,0 +1,19 @@
+behaviors:
+  TaxiAgent:
+    trainer_type: ppo          # required by ML-Agents protocol even for external control;
+                               # the PPO policy is never used — Python MPPI+CBF sends actions
+    hyperparameters:
+      batch_size: 64
+      buffer_size: 1024
+      learning_rate: 3.0e-4
+    network_settings:
+      normalize: false         # normalisation is done on the Python side
+      hidden_units: 64
+      num_layers: 1
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    max_steps: 5000000
+    time_horizon: 64
+    summary_freq: 1000

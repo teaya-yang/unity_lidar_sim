@@ -197,7 +197,7 @@ public class GroundTruthPublisher : MonoBehaviour
     static string GetState(Agent a)
     {
         var nav = a.GetComponent<UnityEngine.AI.NavMeshAgent>();
-        if (nav == null) return "Unknown";
+        if (nav == null || !nav.isActiveAndEnabled || !nav.isOnNavMesh) return "Unknown";
         if (nav.isStopped)                              return "Paused";
         if (a.HasPatrolPath && nav.remainingDistance > 0.5f) return "Patrolling";
         return "Wandering";

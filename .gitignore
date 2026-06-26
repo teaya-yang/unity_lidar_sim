@@ -1,4 +1,5 @@
 /pointcloud_data/
+.venv/
 
 # Unity generated
 unity_ros_lidar/Library/
@@ -14,3 +15,8 @@ unity_ros_lidar/Assets/Scenarios/SCENARIOS.md.meta
 # Remove bags
 bags/*
 nuscenes*
+
+# Remove venv
+venv/
+
+TODO_CLAUDE.md

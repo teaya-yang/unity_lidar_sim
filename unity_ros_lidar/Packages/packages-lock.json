@@ -148,6 +148,18 @@
       "dependencies": {},
       "url": "https://packages.unity.com"
     },
+    "com.unity.ml-agents": {
+      "version": "https://github.com/Unity-Technologies/ml-agents.git?path=/com.unity.ml-agents",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.unity.ai.inference": "2.6.1",
+        "com.unity.modules.imageconversion": "1.0.0",
+        "com.unity.modules.jsonserialize": "1.0.0",
+        "com.unity.modules.physics": "1.0.0"
+      },
+      "hash": "85bbba708ca022e26719bd3df5882a54137c9af0"
+    },
     "com.unity.multiplayer.center": {
       "version": "1.0.1",
       "depth": 0,

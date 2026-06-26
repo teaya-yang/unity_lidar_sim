@@ -16,6 +16,9 @@ public class TaxiwayLaneEditor : Editor
     // Index of the waypoint currently being dragged (-1 = none)
     int _selectedIndex = -1;
 
+    // Index of the yield-to lane currently selected in the Inspector list (-1 = none)
+    int _selectedYieldIndex = -1;
+
     void OnEnable()
     {
         _waypointsProp  = serializedObject.FindProperty("_waypoints");
@@ -104,7 +107,52 @@ public class TaxiwayLaneEditor : Editor
 
         EditorGUILayout.Space(6);
         EditorGUILayout.LabelField("Intersection right-of-way", EditorStyles.boldLabel);
-        EditorGUILayout.PropertyField(_yieldToLanesProp, includeChildren: true);
+
+        // Draw yield-to list manually so we can track which entry is selected
+        // and highlight that lane larger in the Scene view.
+        int yieldCount = _yieldToLanesProp.arraySize;
+        for (int i = 0; i < yieldCount; i++)
+        {
+            EditorGUILayout.BeginHorizontal();
+
+            bool isYieldSelected = (i == _selectedYieldIndex);
+            GUI.color = isYieldSelected ? new Color(1f, 0.55f, 0f) : Color.white;
+            SerializedProperty elem = _yieldToLanesProp.GetArrayElementAtIndex(i);
+            EditorGUILayout.PropertyField(elem, new GUIContent($"  [{i}]"));
+            GUI.color = Color.white;
+
+            if (GUILayout.Button(isYieldSelected ? "★" : "☆", GUILayout.Width(26)))
+            {
+                _selectedYieldIndex = isYieldSelected ? -1 : i;
+                SceneView.RepaintAll();
+            }
+
+            if (GUILayout.Button("✕", GUILayout.Width(22)))
+            {
+                _yieldToLanesProp.DeleteArrayElementAtIndex(i);
+                if (_selectedYieldIndex >= _yieldToLanesProp.arraySize) _selectedYieldIndex = -1;
+                SceneView.RepaintAll();
+                break;
+            }
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        EditorGUILayout.BeginHorizontal();
+        if (GUILayout.Button("Add Yield Lane"))
+        {
+            _yieldToLanesProp.InsertArrayElementAtIndex(yieldCount);
+            _yieldToLanesProp.GetArrayElementAtIndex(yieldCount).objectReferenceValue = null;
+        }
+        GUI.enabled = yieldCount > 0;
+        if (GUILayout.Button("Remove Last"))
+        {
+            _yieldToLanesProp.DeleteArrayElementAtIndex(yieldCount - 1);
+            if (_selectedYieldIndex >= _yieldToLanesProp.arraySize) _selectedYieldIndex = -1;
+            SceneView.RepaintAll();
+        }
+        GUI.enabled = true;
+        EditorGUILayout.EndHorizontal();
 
         serializedObject.ApplyModifiedProperties();
     }
@@ -152,6 +200,32 @@ public class TaxiwayLaneEditor : Editor
             {
                 Handles.color = lane.IsHoldingPosition ? new Color(1f, 0.3f, 0.3f) : Color.yellow;
                 DrawArrow(wp, lane.Waypoints[i + 1]);
+            }
+        }
+
+        // Highlighted yield-to lane (selected via ★ button in the Inspector)
+        if (_selectedYieldIndex >= 0 && _selectedYieldIndex < _yieldToLanesProp.arraySize)
+        {
+            var yieldRef = _yieldToLanesProp.GetArrayElementAtIndex(_selectedYieldIndex).objectReferenceValue as TaxiwayLane;
+            if (yieldRef != null && yieldRef.Waypoints != null && yieldRef.Waypoints.Length > 0)
+            {
+                Color highlight = new Color(1f, 0.55f, 0f);
+                Handles.color = highlight;
+
+                for (int i = 0; i < yieldRef.Waypoints.Length; i++)
+                {
+                    float size = HandleUtility.GetHandleSize(yieldRef.Waypoints[i]) * 0.35f;
+                    Handles.SphereHandleCap(0, yieldRef.Waypoints[i], Quaternion.identity, size, EventType.Repaint);
+
+                    if (i < yieldRef.Waypoints.Length - 1)
+                    {
+                        Handles.DrawLine(yieldRef.Waypoints[i], yieldRef.Waypoints[i + 1], 4f);
+                    }
+
+                    Handles.Label(yieldRef.Waypoints[i] + Vector3.up * 1.2f,
+                        $"YIELD→ {yieldRef.name}[{i}]",
+                        new GUIStyle { normal = { textColor = highlight }, fontSize = 11, fontStyle = FontStyle.Bold });
+                }
             }
         }
 

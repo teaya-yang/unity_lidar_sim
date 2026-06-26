@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.unity.ml-agents": "https://github.com/Unity-Technologies/ml-agents.git?path=/com.unity.ml-agents",
     "com.unity.ai.assistant": "2.9.0-pre.2",
     "com.unity.ai.inference": "2.6.1",
     "com.unity.ai.navigation": "2.0.12",
