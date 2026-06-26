@@ -298,6 +298,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &64510981
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 64510982}
+  m_Layer: 0
+  m_Name: Conflict (1)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &64510982
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 64510981}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -4.7, y: 0, z: 61.8}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &351830359
 GameObject:
   m_ObjectHideFlags: 0
@@ -323,7 +354,7 @@ Transform:
   m_GameObject: {fileID: 351830359}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.2, y: 0, z: 63.6}
+  m_LocalPosition: {x: -6.7, y: 0, z: 48.4}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1312,7 +1343,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TaxiScenarioManager
   incursionPrefab: {fileID: 985866007}
   maxAgents: 3
-  conflictPoint: {fileID: 351830360}
+  conflictPoints:
+  - {fileID: 351830360}
+  - {fileID: 64510982}
+  - {fileID: 1996357409}
   defaultDifficulty: 0.9
   defaultIncursionDt: 0
   defaultAmbulanceSpeed: 5
@@ -1726,6 +1760,37 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4473652613745982, guid: e88383b28fa9049408fb72235350effe, type: 3}
   m_PrefabInstance: {fileID: 1000396420}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1996357408
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1996357409}
+  m_Layer: 0
+  m_Name: Conflict (2)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1996357409
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1996357408}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 8.4, y: 0, z: 112.1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2069431887 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 63acf3fb5905fd843b4e8f044246ee10, type: 3}
@@ -1771,4 +1836,6 @@ SceneRoots:
   - {fileID: 1218424474}
   - {fileID: 35649850}
   - {fileID: 351830360}
+  - {fileID: 64510982}
+  - {fileID: 1996357409}
   - {fileID: 1820338497}
