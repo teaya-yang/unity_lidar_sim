@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -44,8 +45,23 @@ public class TaxiScenarioManager : MonoBehaviour
     public float lateralSpread           = 3f;
     public float speedVariation          = 0.05f;
 
+    [Header("GeoJSON map integration (optional)")]
+    [Tooltip("Assign to enable map-based ego spawning and path-following obstacles. " +
+             "Leave null to use the legacy conflict-point layout.")]
+    public TaxiwayNetwork network;
+    [Tooltip("Skip ego paths whose sharpest corner exceeds this [deg]. The aircraft cannot " +
+             "steer through tight corners at taxi speed; such paths make it leave the lane and stall.")]
+    public float maxEgoTurnDeg    = 35f;
+    [Tooltip("Skip ego paths shorter than this [m] so episodes have room to run.")]
+    public float minEgoPathLength = 60f;
+    [Tooltip("Never spawn an obstacle closer than this [m] to the ego at episode start.")]
+    public float minObstacleSpawnDist = 15f;
+
     // ── public read-only ───────────────────────────────────────────────────────
     public IReadOnlyList<IncursionAgentController> ActiveAgents => _active;
+
+    // The path assigned to the ego this episode (null when network is not used).
+    public TaxiwayPath EgoPath { get; private set; }
 
     // ── internal ───────────────────────────────────────────────────────────────
     readonly List<IncursionAgentController> _pool   = new List<IncursionAgentController>();
@@ -86,6 +102,15 @@ public class TaxiScenarioManager : MonoBehaviour
     {
         _active.Clear();
         foreach (var a in _pool) a.gameObject.SetActive(false);
+        EgoPath = null;
+
+        // ── Map-based episode (network assigned and has paths) ─────────────────
+        if (network != null && network.Paths.Count > 0)
+        {
+            ResetEpisodeFromNetwork(difficulty, aircraftSpeed, aircraftTransform, baseDt,
+                                    ambulanceSpeed, scenarioType);
+            return;
+        }
 
         if (_pool.Count == 0 || conflictPoints == null || conflictPoints.Count == 0) return;
 
@@ -162,6 +187,144 @@ public class TaxiScenarioManager : MonoBehaviour
 
         Debug.Log($"[TaxiScenarioManager] reset type={(ScenarioType)scenarioType} " +
                   $"diff={difficulty:F2} n={nActive} zOff={zOffset:+.1f}");
+    }
+
+    // ── Map-based (GeoJSON network) episode reset ─────────────────────────────
+
+    void ResetEpisodeFromNetwork(float difficulty, float aircraftSpeed,
+                                  Transform aircraftTransform, float baseDt,
+                                  float ambulanceSpeed, int scenarioType)
+    {
+        var paths = network.Paths;
+
+        // Pick a random NAVIGABLE path for the ego (skip ones with corners the aircraft
+        // cannot physically steer through — they cause the plane to leave the lane and stall).
+        var navigable = new List<int>();
+        for (int pi = 0; pi < paths.Count; pi++)
+            if (paths[pi].MaxTurnDeg <= maxEgoTurnDeg && paths[pi].TotalLength >= minEgoPathLength)
+                navigable.Add(pi);
+
+        int egoPathIdx = navigable.Count > 0
+            ? navigable[Random.Range(0, navigable.Count)]
+            : Random.Range(0, paths.Count);   // fallback: nothing qualifies
+        EgoPath = paths[egoPathIdx];
+        var egoWps = EgoPath.Waypoints;
+        if (egoWps.Count > 0)
+        {
+            aircraftTransform.position    = egoWps[0];
+            Vector3 initDir = egoWps.Count > 1
+                ? (egoWps[1] - egoWps[0]).normalized
+                : Vector3.forward;
+            if (initDir.sqrMagnitude > 1e-6f)
+                aircraftTransform.rotation = Quaternion.LookRotation(initDir, Vector3.up);
+        }
+
+        // Determine how many obstacle agents to activate
+        int nActive;
+        TrajectoryMode[] modes;
+        ResolveLayout((ScenarioType)scenarioType, difficulty, _pool.Count, out nActive, out modes);
+
+        // Collect candidate intersecting paths (exclude the ego's own path)
+        var candidatePaths = new List<(TaxiwayPath path, Vector3 intersection)>();
+        for (int pi = 0; pi < paths.Count; pi++)
+        {
+            if (pi == egoPathIdx) continue;
+            if (network.TryFindIntersection(EgoPath, paths[pi], out Vector3 ix))
+                candidatePaths.Add((paths[pi], ix));
+        }
+
+        // Shuffle candidates so agent assignments vary
+        for (int i = candidatePaths.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            var tmp = candidatePaths[i]; candidatePaths[i] = candidatePaths[j]; candidatePaths[j] = tmp;
+        }
+
+        for (int i = 0; i < nActive; i++)
+        {
+            var agent = _pool[i];
+            agent.gameObject.SetActive(true);
+
+            TaxiwayPath obsPath;
+            Vector3 conflictPt;
+
+            if (i < candidatePaths.Count)
+            {
+                (obsPath, conflictPt) = candidatePaths[i];
+            }
+            else
+            {
+                // No intersecting path found for this slot — fall back to a random path
+                obsPath    = paths[Random.Range(0, paths.Count)];
+                conflictPt = obsPath.Waypoints.Count > 0
+                    ? obsPath.Waypoints[obsPath.Waypoints.Count / 2]
+                    : Vector3.zero;
+            }
+
+            // Time for the EGO to reach the intersection: arc-length from the ego's current
+            // position to the conflict point, along the EGO path — NOT to the path end.
+            float egoArcNow      = network.GetRelativeState(
+                                      aircraftTransform.position, Vector3.forward, EgoPath).s;
+            float egoArcConflict = network.GetRelativeState(
+                                      conflictPt, Vector3.forward, EgoPath).s;
+            float egoTtc = Mathf.Max(0f,
+                (egoArcConflict - egoArcNow) / Mathf.Max(1f, aircraftSpeed));
+
+            float dtOffset = baseDt + i * 1.5f;
+            float spd      = ambulanceSpeed * (1f + i * speedVariation);
+
+            // Place the obstacle UPSTREAM on its own path so it reaches the conflict point
+            // at the same time as the ego (offset by dtOffset for staggering).
+            PathState obsState = network.GetRelativeState(conflictPt, Vector3.forward, obsPath);
+            float     obsArc   = obsState.s - spd * (egoTtc + dtOffset);
+            obsArc             = Mathf.Clamp(obsArc, 0f, obsPath.TotalLength);
+
+            // Walk the arc to find world position
+            Vector3 spawnPos = ArcToWorldPosition(obsPath, obsArc);
+
+            // Guard: never spawn an obstacle on top of the ego. If the computed spawn is
+            // too close, push it upstream along its path; if still too close, skip this agent.
+            if (Vector3.Distance(spawnPos, aircraftTransform.position) < minObstacleSpawnDist)
+            {
+                float backedArc = Mathf.Clamp(obsArc - minObstacleSpawnDist * 2f, 0f, obsPath.TotalLength);
+                spawnPos = ArcToWorldPosition(obsPath, backedArc);
+                if (Vector3.Distance(spawnPos, aircraftTransform.position) < minObstacleSpawnDist)
+                {
+                    agent.gameObject.SetActive(false);
+                    Debug.Log($"[TaxiScenarioManager] (map) Agent {i}: skipped (too close to ego).");
+                    continue;
+                }
+            }
+
+            agent.assignedPath   = obsPath;
+            agent.trajectoryMode = modes[i];
+            agent.crossDirection  = obsState.tangent;
+            agent.ResetCrossing(spawnPos, spd);
+            _active.Add(agent);
+
+            Debug.Log($"[TaxiScenarioManager] (map) Agent {i}: mode={modes[i]} " +
+                      $"spd={spd:F1} arc={obsArc:F0}m");
+        }
+
+        Debug.Log($"[TaxiScenarioManager] (map) reset egoPath={egoPathIdx} n={nActive}");
+    }
+
+    // Returns the world position at a given arc-length along a path.
+    static Vector3 ArcToWorldPosition(TaxiwayPath path, float arc)
+    {
+        arc = Mathf.Clamp(arc, 0f, path.TotalLength);
+        var  cl  = path.CumulativeLength;
+        var  wps = path.Waypoints;
+        for (int i = 0; i < cl.Length - 1; i++)
+        {
+            if (arc <= cl[i + 1])
+            {
+                float segLen = cl[i + 1] - cl[i];
+                float t = segLen > 1e-6f ? (arc - cl[i]) / segLen : 0f;
+                return Vector3.Lerp(wps[i], wps[i + 1], t);
+            }
+        }
+        return wps[wps.Count - 1];
     }
 
     // ── layout table ──────────────────────────────────────────────────────────

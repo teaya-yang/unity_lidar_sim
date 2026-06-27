@@ -5,35 +5,39 @@ External Python controller for the Unity taxiing environment.
 Connects via the ML-Agents Python API, runs MPPI + HOCBF-QP, and sends
 [a, delta] actions back to Unity each decision step.
 
-Observation contract (must match TaxiAgent.cs CollectObservations order):
-  obs[0]   x_ego    — forward position along taxiway (Unity Z) [m]
-  obs[1]   y_ego    — lateral offset (Unity X) [m]
-  obs[2]   theta    — heading error from +Z axis [rad], normalised to [-pi, pi]
-  obs[3]   v        — speed [m/s]
-  obs[4]   obs0_dx  — nearest obstacle: forward separation (Unity Z) [m]
-  obs[5]   obs0_dy  — nearest obstacle: lateral separation (Unity X) [m]
-  obs[6]   obs0_vx  — nearest obstacle: velocity along Z [m/s]
-  obs[7]   obs0_vy  — nearest obstacle: velocity along X [m/s]
-  obs[8]   obs1_dx  — 2nd obstacle (zero-padded if absent)
-  obs[9]   obs1_dy
-  obs[10]  obs1_vx
-  obs[11]  obs1_vy
-  obs[12]  obs2_dx  — 3rd obstacle (zero-padded if absent)
-  obs[13]  obs2_dy
-  obs[14]  obs2_vx
-  obs[15]  obs2_vy
-  obs[16]  goal_dx  — distance to goal along Z [m]
-  obs[17]  cbf_h    — barrier value h = dist^2 - D^2 of nearest obstacle (logging)
+Observation contract (must match TaxiAgent.cs CollectObservations, OBS_SIZE=20):
+
+  WITHOUT TaxiwayNetwork (global frame):
+    obs[0]   x_ego    — Unity Z position [m]
+    obs[1]   y_ego    — Unity X position [m]
+    obs[2]   theta    — heading [rad]
+    obs[18]  0.0      (tangent_x stub)
+    obs[19]  1.0      (tangent_z stub)
+
+  WITH TaxiwayNetwork (Frenet frame):
+    obs[0]   s        — arc-length along ego path [m]
+    obs[1]   d        — signed cross-track error [m]  (+ = left)
+    obs[2]   theta_e  — heading error vs path tangent [rad]
+    obs[18]  tangent_x — world X component of path tangent (Unity X)
+    obs[19]  tangent_z — world Z component of path tangent (Unity Z)
+
+  Both modes (common):
+    obs[3]   v        — speed [m/s]
+    obs[4..15]        3 × obstacle (dx_global, dy_global, vx, vy) — 12 floats
+    obs[16]  goal     — remaining distance/arc to goal [m]
+    obs[17]  cbf_h    — barrier value h = dist^2 - D^2 of nearest obstacle
+
+  FRENET MODE DETECTION: abs(obs[18]) + abs(obs[19]) > 0.01 AND obs[19] != 1.0
 
 Action contract:
   act[0]  a_cmd     — acceleration [m/s^2], clipped to [A_MIN, A_MAX]
   act[1]  delta_cmd — steering [rad],       clipped to [-DELTA_LIM, DELTA_LIM]
 
-COORDINATE NOTE:
-  Python baseline uses X=forward, Y=lateral.
-  Unity scene uses Z=forward (taxiway), X=lateral.
-  obs_to_state() is the single bridge. Do NOT touch MPPI/CBF logic if only the
-  axis mapping changes — fix obs_to_state() only.
+MPPI IN FRENET MODE:
+  Uses a local linear path approximation (zero curvature between steps).
+  State [0] = arc-length progress Δs, [1] = cross-track error d.
+  Valid for airport taxiway curvatures over a 2.5 s horizon.
+  CBF uses Euclidean obstacle distances and is frame-independent.
 """
 
 import numpy as np
@@ -79,7 +83,7 @@ BIG = 300.0
 
 # Number of obstacles packed in the observation vector (must match TaxiAgent K_OBS)
 K_OBS    = 3
-OBS_SIZE = 4 + K_OBS * 4 + 2   # 18: ego(4) + K_OBS*4 + goal_dx(1) + cbf_h(1)
+OBS_SIZE = 4 + K_OBS * 4 + 2 + 2   # 20: ego(4) + K_OBS*4 + goal(1) + cbf_h(1) + tangent(2)
 
 # Scenario types — int value pushed as 'scenario_type' side channel
 SCENARIO_STANDARD    = 0
@@ -96,29 +100,47 @@ rng = np.random.default_rng(42)
 
 # ── Observation unpacking ────────────────────────────────────────────────────
 
+def _is_frenet_mode(obs: np.ndarray) -> bool:
+    """
+    Detect whether Unity is sending Frenet-frame observations.
+    The stub values when no network is assigned are tangent=(0,1) exactly.
+    A real path tangent will have tangent_z != 1.0 or tangent_x != 0.0.
+    """
+    tan_x = float(obs[18])
+    tan_z = float(obs[19])
+    # Stub: (0.0, 1.0).  Real tangent: anything else (path tangent is unit-length).
+    return not (abs(tan_x) < 1e-4 and abs(tan_z - 1.0) < 1e-4)
+
+
 def obs_to_state(obs: np.ndarray, prev_delta: float = 0.0, prev_accel: float = 0.0):
     """
-    Unpack the Unity observation vector.
+    Unpack the Unity 20-D observation vector.
 
     Returns
     -------
-    s        : np.ndarray shape (6,)  — [x_fwd, y_lat, theta, v, delta_actual, accel_actual]
-    obstacles: list of (obs_xy, obs_v) — up to K_OBS entries, padded slots omitted
-    goal_dx  : float
+    s          : np.ndarray shape (6,)
+                 Global mode   — [x_fwd, y_lat, theta, v, delta_actual, accel_actual]
+                 Frenet mode   — [s_arc, d_cross, theta_e, v, delta_actual, accel_actual]
+    obstacles  : list of (rel_xy, obs_v)
+                 rel_xy is ego-relative (dx, dy) in whichever frame.
+                 CBF uses Euclidean distance so it's frame-independent.
+    goal       : float  — remaining distance / arc-length to goal
+    frenet_mode: bool   — True when TaxiwayNetwork is active in Unity
+    tangent    : np.ndarray (2,) — (tan_x, tan_z) in Unity world space;
+                 use to rotate CBF safe-set or path-following cost
 
-    delta_actual and accel_actual are NOT sent as observations (Unity owns them internally).
-    We carry them as Python-side state across steps, passed in as prev_delta / prev_accel.
-
-    A padded slot has obs_dy == 999 (sentinel from TaxiAgent zero-padding).
-    We skip those so MPPI/CBF only sees real obstacles.
+    A zero-padded obstacle slot has dy == 999; those are skipped.
     """
-    x_ego   = float(obs[0])
-    y_ego   = float(obs[1])
-    theta   = float(obs[2])
+    ego0    = float(obs[0])   # x_ego (global) or s (Frenet)
+    ego1    = float(obs[1])   # y_ego (global) or d (Frenet)
+    ego2    = float(obs[2])   # theta (global) or theta_e (Frenet)
     v       = float(obs[3])
-    goal_dx = float(obs[16])
+    goal    = float(obs[16])
+    tan_x   = float(obs[18])
+    tan_z   = float(obs[19])
+    frenet  = _is_frenet_mode(obs)
 
-    s = np.array([x_ego, y_ego, theta, v, prev_delta, prev_accel])
+    s = np.array([ego0, ego1, ego2, v, prev_delta, prev_accel])
 
     obstacles = []
     for i in range(K_OBS):
@@ -128,22 +150,21 @@ def obs_to_state(obs: np.ndarray, prev_delta: float = 0.0, prev_accel: float = 0
         vx_obs = float(obs[base + 2])
         vy_obs = float(obs[base + 3])
 
-        # Skip zero-padded slots (dy == 999 sentinel)
-        if abs(dy) > 900:
+        if abs(dy) > 900:   # zero-padded sentinel
             continue
 
-        obs_xy = np.array([x_ego + dx, y_ego + dy])
+        # rel_xy: obstacle position relative to ego, regardless of frame
+        rel_xy = np.array([dx, dy])
         obs_v  = np.array([vx_obs, vy_obs])
-        obstacles.append((obs_xy, obs_v))
+        obstacles.append((rel_xy, obs_v))
 
-    return s, obstacles, goal_dx
+    return s, obstacles, goal, frenet, np.array([tan_x, tan_z])
 
 
 def inject_sensor_noise(obs: np.ndarray, noise_std: float, rng_local) -> np.ndarray:
     """
     Add Gaussian noise to the obstacle observation slots [4..15].
-    Ego state [0..3] and goal/cbf [16..17] are not corrupted
-    (they come from onboard sensors assumed more reliable).
+    Ego state [0..3], goal/cbf [16..17], and tangent [18..19] are not corrupted.
     """
     if noise_std <= 0.0:
         return obs
@@ -193,10 +214,25 @@ def _rollout_step(st, a_cmd, delta_cmd):
     return st_new
 
 
-def mppi(s0, mean, obstacles, goal_dx):
+def mppi(s0, mean, obstacles, goal, frenet_mode=False, tangent=None):
     """
     Sample K_MPPI rollouts with realistic 6D state dynamics.
-    s0 shape: (6,) — [x, y, theta, v, delta_actual, accel_actual]
+
+    Global mode (frenet_mode=False):
+      s0 = [x, y, theta_global, v, delta, accel]. Rollout in world frame.
+      Lane cost penalises lateral position y; obstacles in world coords.
+
+    Frenet mode (frenet_mode=True, tangent=(tan_x, tan_z)):
+      s0 = [s_arc, d, theta_e, v, delta, accel].
+      We RECONSTRUCT the global heading from the path tangent and roll out in
+      the WORLD frame so that obstacle deltas/velocities (which Unity always
+      sends in world coords) stay in one consistent frame as the ego heading.
+      The lane-following cost is then recovered by projecting the world-frame
+      displacement onto the path tangent (progress) and normal (cross-track).
+
+      tangent points along the path in world space: heading angle is
+      atan2(tan_x, tan_z) because the rollout uses cos(theta)->Z, sin(theta)->X.
+
     Returns (u_nom, new_mean).
     """
     noise = rng.normal(0, [SIG_A, SIG_D], (K_MPPI, H_MPPI, 2))
@@ -207,23 +243,55 @@ def mppi(s0, mean, obstacles, goal_dx):
     cost = np.zeros(K_MPPI)
     st   = np.tile(s0, (K_MPPI, 1)).astype(float)
 
+    if frenet_mode:
+        # Reconstruct world heading and roll out from a zeroed world origin.
+        tan_x, tan_z = float(tangent[0]), float(tangent[1])
+        th_tan = np.arctan2(tan_x, tan_z)          # path heading in world frame
+        d0     = s0[1]                             # initial cross-track error
+        th_g0  = th_tan - s0[2]                     # theta_e = th_tan - th_global
+        st[:, 0] = 0.0                              # world Z displacement from start
+        st[:, 1] = 0.0                              # world X displacement from start
+        st[:, 2] = th_g0                            # world heading
+        s0_fwd = 0.0
+        s0_lat = 0.0
+    else:
+        s0_fwd = s0[0]
+        s0_lat = s0[1]
+
     for k in range(H_MPPI):
         st = _rollout_step(st, na[:, k, 0], na[:, k, 1])
+        fwd, lat, th, vv = st[:, 0], st[:, 1], st[:, 2], st[:, 3]
 
-        y, th, vv = st[:, 1], st[:, 2], st[:, 3]
-        cost += W_LAT  * y**2
-        cost += W_HEAD * th**2
+        if frenet_mode:
+            # Cross-track error d(t) = d0 + (Tz*ΔX - Tx*ΔZ); matches GetRelativeState sign.
+            d_t     = d0 + tan_z * lat - tan_x * fwd
+            theta_e = th_tan - th
+            cost += W_LAT  * d_t**2
+            cost += W_HEAD * theta_e**2
+            cost += np.where(np.abs(d_t) > W_HALF, W_OFF * (np.abs(d_t) - W_HALF)**2, 0.)
+        else:
+            cost += W_LAT  * lat**2
+            cost += W_HEAD * th**2
+            cost += np.where(np.abs(lat) > W_HALF, W_OFF * (np.abs(lat) - W_HALF)**2, 0.)
+
         cost += W_V    * (vv - V_DES)**2
         cost += W_CTRL * (na[:, k, 0]**2 + 4. * na[:, k, 1]**2)
-        cost += np.where(np.abs(y) > W_HALF, W_OFF * (np.abs(y) - W_HALF)**2, 0.)
 
-        for obs_xy, obs_v in obstacles:
-            obs_pred = obs_xy + obs_v * (k + 1) * DT
-            d = np.hypot(st[:, 0] - obs_pred[0], st[:, 1] - obs_pred[1])
-            cost += np.where(d < D_INFL, W_OBS * (D_INFL - d)**2, 0.)
-            cost += np.where(d < D_SAFE, BIG, 0.)
+        # Obstacles — world frame in both modes. rel_xy is ego-relative (world Z, X).
+        t_elapsed = (k + 1) * DT
+        for rel_xy, obs_v in obstacles:
+            obs_z = s0_fwd + rel_xy[0] + obs_v[0] * t_elapsed
+            obs_x = s0_lat + rel_xy[1] + obs_v[1] * t_elapsed
+            d_obs = np.hypot(fwd - obs_z, lat - obs_x)
+            cost += np.where(d_obs < D_INFL, W_OBS * (D_INFL - d_obs)**2, 0.)
+            cost += np.where(d_obs < D_SAFE, BIG, 0.)
 
-    cost += W_PROG * (goal_dx - (st[:, 0] - s0[0]))
+    # Progress
+    if frenet_mode:
+        prog = tan_z * st[:, 0] + tan_x * st[:, 1]   # displacement along tangent
+        cost += W_PROG * (goal - prog)
+    else:
+        cost += W_PROG * (goal - (st[:, 0] - s0_fwd))
 
     w   = np.exp(-(cost - cost.min()) / LAMBDA)
     w  /= w.sum()
@@ -236,19 +304,21 @@ def mppi(s0, mean, obstacles, goal_dx):
 
 # ── HOCBF-QP ─────────────────────────────────────────────────────────────────
 
-def hocbf_constraint(s, u_nom, obs_xy, obs_v):
+def hocbf_constraint(s, u_nom, rel_xy, obs_v):
     """
     Compute one HOCBF constraint row for a single obstacle.
     Returns (A_row, b_row) for the QP inequality A @ u >= b.
+
+    rel_xy : ego-relative obstacle position (dx_fwd, dy_lat) — works in both frames
+             because h = dist² - D² is Euclidean and frame-independent for constraint geometry.
     """
     x, y, th, v  = s
     a_nom  = float(np.clip(u_nom[0], A_MIN, A_MAX))
     d_nom  = float(np.clip(u_nom[1], -DELTA_LIM, DELTA_LIM))
-    px, py = obs_xy
+    # dx, dy are relative to ego: obstacle is at (x+rel_xy[0], y+rel_xy[1])
+    dx     = -rel_xy[0]   # ego → obstacle: ego minus obstacle = -(obs - ego)
+    dy     = -rel_xy[1]
     vx, vy = obs_v
-
-    dx     = x  - px
-    dy     = y  - py
     rel_vx = v * np.cos(th) - vx
     rel_vy = v * np.sin(th) - vy
 
@@ -296,7 +366,7 @@ def cbf_qp(s, u_nom, obstacles):
     b_box = np.array([A_MIN, -A_MAX, -DELTA_LIM, -DELTA_LIM])
 
     if obstacles:
-        cbf_rows = []
+        cbf_rows = []  # obstacles is list of (rel_xy, obs_v)
         cbf_rhs  = []
         for obs_xy, obs_v in obstacles:
             row, rhs = hocbf_constraint(s, u_nom, obs_xy, obs_v)
@@ -402,7 +472,7 @@ def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_diff
 
 def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
         min_difficulty=0.0, max_difficulty=1.0,
-        noise_std=0.0, scenario_type=SCENARIO_STANDARD):
+        noise_std=0.0, scenario_type=SCENARIO_STANDARD, no_cbf=False):
     print(f"[Controller] Connecting to Unity on port {port} ...")
     env_params = EnvironmentParametersChannel()
     env = UnityEnvironment(
@@ -457,40 +527,61 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
               f"v_amb={sc['ambulance_speed']:.2f} m/s  "
               f"diff={sc['difficulty']:.2f}  "
               f"noise={noise_std:.3f}  "
-              f"dir={'L' if sc['cross_dir_sign'] < 0 else 'R'}")
+              f"dir={'L' if sc['cross_dir_sign'] < 0 else 'R'}  "
+              f"{'[NO-CBF]' if no_cbf else '[CBF]'}")
 
         env.reset()
         decision_steps, terminal_steps = env.get_steps(behavior_name)
 
-        prev_x        = None
-        ep_steps      = 0
-        delta_actual  = 0.0   # tracked Python-side to feed into MPPI state
-        accel_actual  = 0.0
+        ep_steps     = 0
+        delta_actual = 0.0   # tracked Python-side to feed into MPPI state
+        accel_actual = 0.0
+        frenet_mode  = False
+        episode_done = False
+        # Re-seed MPPI per episode so CBF vs no-CBF runs are directly comparable.
+        rng = np.random.default_rng(BASE_SEED + ep)
 
-        while True:
-            if len(decision_steps) == 0:
+        while not episode_done:
+            # ── Terminal step (episode just ended) ──────────────────────────────
+            if len(terminal_steps) > 0:
+                ep_log["collided"] = ep_log["min_h"] < 0.
+                ep_log["reached"]  = not terminal_steps.interrupted[0] and not ep_log["collided"]
+                episode_done = True
                 break
+
+            if len(decision_steps) == 0:
+                env.step()
+                decision_steps, terminal_steps = env.get_steps(behavior_name)
+                continue
 
             obs   = decision_steps.obs[0][0]          # shape (OBS_SIZE,)
-            x_now = float(obs[0])
-
-            # Detect episode reset: x_ego jumps backward
-            if prev_x is not None and x_now < prev_x - 10.0 and ep_steps > 10:
-                break
-            prev_x   = x_now
             ep_steps += 1
 
             obs_n = inject_sensor_noise(obs, noise_std, rng)
-            s, obstacles, goal_dx = obs_to_state(obs_n, delta_actual, accel_actual)
+            s, obstacles, goal, frenet_mode, tangent = obs_to_state(obs_n, delta_actual, accel_actual)
 
-            if ep_log["steps"] % 20 == 0:
-                n_obs_str = f"{len(obstacles)} obstacle(s)"
-                print(f"[DEBUG] x={s[0]:.1f} y={s[1]:.2f} th={s[2]:.3f} "
-                      f"v={s[3]:.2f} δ={s[4]:.3f} a_act={s[5]:.2f}  "
-                      f"{n_obs_str}  goal_dx={goal_dx:.1f}")
+            if ep_steps % 20 == 0:
+                mode_str = f"[Frenet tan=({tangent[0]:.2f},{tangent[1]:.2f})]" if frenet_mode else "[global]"
+                print(f"[DEBUG] {mode_str} fwd={s[0]:.1f} lat={s[1]:.2f} "
+                      f"th={s[2]:.3f} v={s[3]:.2f} δ={s[4]:.3f} a_act={s[5]:.2f}  "
+                      f"{len(obstacles)} obs  goal={goal:.1f}")
 
-            u_nom, mean = mppi(s, mean, obstacles, goal_dx)
-            u_cmd, cbf_engaged = cbf_qp(s[:4], u_nom, obstacles)  # CBF uses [x,y,th,v] only
+            u_nom, mean = mppi(s, mean, obstacles, goal, frenet_mode, tangent)
+
+            if no_cbf:
+                u_cmd      = u_nom
+                cbf_engaged = False
+            else:
+                # CBF must run in the WORLD frame: obstacle deltas/velocities are world-frame,
+                # so the ego heading fed to the CBF must be world-frame too. In Frenet mode the
+                # observed heading is theta_e (path-relative), so reconstruct global heading.
+                if frenet_mode:
+                    th_tan   = np.arctan2(tangent[0], tangent[1])
+                    th_world = th_tan - s[2]
+                    s_cbf    = np.array([0.0, 0.0, th_world, s[3]])
+                else:
+                    s_cbf    = s[:4]
+                u_cmd, cbf_engaged = cbf_qp(s_cbf, u_nom, obstacles)
             a_cmd     = float(np.clip(u_cmd[0], A_MIN, A_MAX))
             delta_cmd = float(np.clip(u_cmd[1], -DELTA_LIM, DELTA_LIM))
 
@@ -525,9 +616,6 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
             env.set_actions(behavior_name, action)
             env.step()
             decision_steps, terminal_steps = env.get_steps(behavior_name)
-
-        ep_log["reached"]  = ep_log["min_dist"] > D_SAFE and ep_log["steps"] > 0
-        ep_log["collided"] = ep_log["min_h"] < 0.
         episode_stats.append(ep_log)
 
         verdict = "COLLISION" if ep_log["collided"] else "safe"
@@ -570,6 +658,9 @@ if __name__ == "__main__":
     p.add_argument("--scenario",       default="standard",
                    choices=SCENARIO_NAMES,
                    help="Force a specific scenario type for all episodes.")
+    p.add_argument("--no-cbf",         action="store_true",
+                   help="Disable the HOCBF-QP safety filter (MPPI only). "
+                        "Use for ablation baseline.")
     args = p.parse_args()
 
     sc_int = SCENARIO_NAMES.index(args.scenario)
@@ -580,4 +671,5 @@ if __name__ == "__main__":
         min_difficulty=args.min_difficulty,
         max_difficulty=args.max_difficulty,
         noise_std=args.noise_std,
-        scenario_type=sc_int)
+        scenario_type=sc_int,
+        no_cbf=args.no_cbf)

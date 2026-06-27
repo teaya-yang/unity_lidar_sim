@@ -9,22 +9,29 @@ using UnityEngine;
 /// ML-Agents Agent for aircraft taxiing.
 /// External Python process sends actions [a, delta] each decision step.
 ///
-/// OBSERVATION VECTOR (18 floats — must match Python obs_to_state):
-///   [0]  x_ego    — forward position along taxiway (Unity Z) [m]
-///   [1]  y_ego    — lateral offset (Unity X) [m]
-///   [2]  theta    — heading error from +Z axis [rad], normalised to [-pi, pi]
-///   [3]  v        — speed [m/s]
-///   [4..7]         nearest obstacle 0: [dx, dy, vx, vy]
-///   [8..11]        nearest obstacle 1: [dx, dy, vx, vy]  (zero-padded if absent)
-///   [12..15]       nearest obstacle 2: [dx, dy, vx, vy]  (zero-padded if absent)
-///   [16] goal_dx  — distance to goal along Z [m]
-///   [17] cbf_h    — barrier value h = dist^2 - D^2 of nearest obstacle (logging)
+/// OBSERVATION VECTOR (20 floats — must match Python OBS_SIZE=20):
 ///
-/// BACKWARD COMPATIBILITY:
-///   If scenarioManager is null, the legacy incursionAgent/incursionController
-///   single-agent path is used. Obstacle slots [4..15] are filled: slot 0 with the
-///   single obstacle, slots 1-2 zero-padded. The Inspector BehaviorParameters must
-///   be set to 18 continuous observations regardless.
+///   WITHOUT network (global frame, backward-compat fallback):
+///   [0]  x_ego    — Unity Z position [m]
+///   [1]  y_ego    — Unity X position [m]
+///   [2]  theta    — heading [rad]
+///   [3]  v
+///   [4..15]        3 × obstacle (dx_global, dy_global, vx, vy)
+///   [16] goal_dx  — Unity Z distance to goal
+///   [17] cbf_h
+///   [18] 0        (tangent_x stub)
+///   [19] 1        (tangent_z stub — points forward)
+///
+///   WITH network (Frenet frame):
+///   [0]  s         — arc-length along ego path [m]
+///   [1]  d         — signed cross-track error [m]  (+ = left)
+///   [2]  theta_e   — heading error vs path tangent [rad]
+///   [3]  v
+///   [4..15]        3 × obstacle (dx_global, dy_global, vx, vy)  ← still global Δ
+///   [16] goal_ds  — remaining arc-length to path end [m]
+///   [17] cbf_h
+///   [18] tangent_x — world X component of path tangent (for CBF rotation in Python)
+///   [19] tangent_z — world Z component of path tangent
 ///
 /// COORDINATE MAPPING:
 ///   Python X (forward) = Unity +Z
@@ -57,6 +64,10 @@ public class TaxiAgent : Unity.MLAgents.Agent
 
     // ── Scene references ───────────────────────────────────────────────────────
 
+    [Header("Performance")]
+    [Tooltip("Time scale for headless/fast runs. 1 = real-time, 20 = 20x speed.")]
+    public float simulationTimeScale = 1f;
+
     [Header("Scene references")]
     public Transform goalMarker;
     public float taxiwayHalfWidth = 10f;
@@ -72,6 +83,11 @@ public class TaxiAgent : Unity.MLAgents.Agent
     [Tooltip("Assign to enable multi-obstacle observations and difficulty curriculum. " +
              "Leave null to fall back to the single-agent incursionController path.")]
     public TaxiScenarioManager scenarioManager;
+
+    [Header("Map network (optional — enables Frenet frame observations)")]
+    [Tooltip("Assign the TaxiwayNetwork in the scene to switch observations to Frenet frame. " +
+             "BehaviorParameters must be set to 20 continuous observations.")]
+    public TaxiwayNetwork network;
 
     // ── Legacy single-agent fields (kept for backward compatibility) ───────────
 
@@ -110,6 +126,7 @@ public class TaxiAgent : Unity.MLAgents.Agent
 
     public override void Initialize()
     {
+        Time.timeScale = simulationTimeScale;
         _rb = GetComponent<Rigidbody>();
         _rb.isKinematic = true;
         _rb.constraints = RigidbodyConstraints.FreezeRotationX
@@ -176,54 +193,71 @@ public class TaxiAgent : Unity.MLAgents.Agent
         _episodeIndex++;
     }
 
-    // ── Observations (18 floats) ───────────────────────────────────────────────
+    // ── Observations (20 floats) ───────────────────────────────────────────────
+    // Layout: [ego(4)] [obs0..2 (4 each, 12 total)] [goal(1)] [cbf_h(1)] [tangent(2)]
+    // See class doc-comment for full slot descriptions.
 
     public override void CollectObservations(VectorSensor sensor)
     {
-        float x_ego = transform.position.z;
-        float y_ego = transform.position.x;
-        float theta = transform.eulerAngles.y * Mathf.Deg2Rad;
-        theta = Mathf.Atan2(Mathf.Sin(theta), Mathf.Cos(theta));
+        // ── Ego state [0..3] ───────────────────────────────────────────────────
+        TaxiwayPath egoPath = scenarioManager != null ? scenarioManager.EgoPath : null;
+        Vector3     tangent = new Vector3(0f, 0f, 1f); // default: straight ahead
+        float       ego0, ego1, ego2, goal_val;
 
-        sensor.AddObservation(x_ego);
-        sensor.AddObservation(y_ego);
-        sensor.AddObservation(theta);
+        if (network != null && egoPath != null)
+        {
+            // Frenet frame
+            PathState ps = network.GetRelativeState(transform.position, transform.forward, egoPath);
+            ego0    = ps.s;
+            ego1    = ps.d;
+            ego2    = ps.thetaError;
+            tangent = ps.tangent;
+            goal_val = network.RemainingArcLength(transform.position, egoPath);
+        }
+        else
+        {
+            // Global frame (backward-compat)
+            ego0 = transform.position.z;
+            ego1 = transform.position.x;
+            float th = transform.eulerAngles.y * Mathf.Deg2Rad;
+            ego2 = Mathf.Atan2(Mathf.Sin(th), Mathf.Cos(th));
+            goal_val = goalMarker != null
+                ? goalMarker.position.z - transform.position.z
+                : 999f;
+        }
+
+        sensor.AddObservation(ego0);
+        sensor.AddObservation(ego1);
+        sensor.AddObservation(ego2);
         sensor.AddObservation(_speed);
 
-        // ── Nearest-K obstacle observations ───────────────────────────────────
-        List<(float dx, float dy, float vx, float vy, float dist2)> slots
-            = new List<(float, float, float, float, float)>();
+        // ── Nearest-K obstacle observations [4..15] ───────────────────────────
+        var slots = new List<(float dx, float dy, float vx, float vy, float dist2)>();
 
         if (scenarioManager != null)
         {
             foreach (var a in scenarioManager.ActiveAgents)
             {
                 Vector3 pos = a.transform.position;
-                float dx    = pos.z - transform.position.z;
-                float dy    = pos.x - transform.position.x;
+                float   dx  = pos.z - transform.position.z;  // global delta
+                float   dy  = pos.x - transform.position.x;
                 Vector3 vel = a.Velocity;
-                float dist2 = dx * dx + dy * dy;
-                slots.Add((dx, dy, vel.z, vel.x, dist2));
+                slots.Add((dx, dy, vel.z, vel.x, dx * dx + dy * dy));
             }
         }
         else if (incursionAgent != null)
         {
-            // Legacy: update velocity estimate
-            Vector3 obsPos = incursionAgent.position;
-            _obsVel     = (obsPos - _obsPosPrev) / Time.fixedDeltaTime;
-            _obsPosPrev = obsPos;
-
-            float dx    = obsPos.z - transform.position.z;
-            float dy    = obsPos.x - transform.position.x;
-            float dist2 = dx * dx + dy * dy;
-            slots.Add((dx, dy, _obsVel.z, _obsVel.x, dist2));
+            Vector3 obsPos  = incursionAgent.position;
+            _obsVel         = (obsPos - _obsPosPrev) / Time.fixedDeltaTime;
+            _obsPosPrev     = obsPos;
+            float dx = obsPos.z - transform.position.z;
+            float dy = obsPos.x - transform.position.x;
+            slots.Add((dx, dy, _obsVel.z, _obsVel.x, dx * dx + dy * dy));
         }
 
-        // Sort nearest first
         slots.Sort((a, b) => a.dist2.CompareTo(b.dist2));
 
         float cbf_h_nearest = float.MaxValue;
-
         for (int i = 0; i < K_OBS; i++)
         {
             if (i < slots.Count)
@@ -233,12 +267,10 @@ public class TaxiAgent : Unity.MLAgents.Agent
                 sensor.AddObservation(s.dy);
                 sensor.AddObservation(s.vx);
                 sensor.AddObservation(s.vy);
-                if (i == 0)
-                    cbf_h_nearest = s.dist2 - dSafe * dSafe;
+                if (i == 0) cbf_h_nearest = s.dist2 - dSafe * dSafe;
             }
             else
             {
-                // Zero-pad: far away on lateral axis, zero velocity
                 sensor.AddObservation(0f);
                 sensor.AddObservation(999f);
                 sensor.AddObservation(0f);
@@ -246,12 +278,11 @@ public class TaxiAgent : Unity.MLAgents.Agent
             }
         }
 
-        float goal_dx = goalMarker != null
-            ? goalMarker.position.z - transform.position.z
-            : 999f;
-
-        sensor.AddObservation(goal_dx);
+        // ── Goal, CBF, tangent [16..19] ───────────────────────────────────────
+        sensor.AddObservation(goal_val);
         sensor.AddObservation(cbf_h_nearest == float.MaxValue ? 999f : cbf_h_nearest);
+        sensor.AddObservation(tangent.x);  // [18] tangent_x — Python rotates CBF constraint
+        sensor.AddObservation(tangent.z);  // [19] tangent_z
     }
 
     // ── Actions received from Python ───────────────────────────────────────────
@@ -266,13 +297,18 @@ public class TaxiAgent : Unity.MLAgents.Agent
 
         _episodeTime += Time.fixedDeltaTime;
 
-        float goal_dx = goalMarker != null
-            ? goalMarker.position.z - transform.position.z
-            : 999f;
+        // Goal distance: arc-length remaining when on network, global Z delta otherwise.
+        TaxiwayPath egoPathAct = scenarioManager != null ? scenarioManager.EgoPath : null;
+        float goal_dx = (network != null && egoPathAct != null)
+            ? network.RemainingArcLength(transform.position, egoPathAct)
+            : (goalMarker != null ? goalMarker.position.z - transform.position.z : 999f);
+
+        // Off-road: cross-track error in map mode, global X otherwise.
+        float lateralErr = LaneLateralError();
 
         bool reached = goal_dx < 2.0f;
         bool timeout = _episodeTime >= maxEpisodeSeconds;
-        bool offRoad = Mathf.Abs(transform.position.x) > taxiwayHalfWidth + 2f;
+        bool offRoad = Mathf.Abs(lateralErr) > taxiwayHalfWidth + 2f;
 
         if (reached)   AddReward( 10f);
         if (_collided) AddReward(-20f);
@@ -322,17 +358,36 @@ public class TaxiAgent : Unity.MLAgents.Agent
 
     float ComputeReward()
     {
-        float y_ego = transform.position.x;
-        float theta = transform.eulerAngles.y * Mathf.Deg2Rad;
-        theta = Mathf.Atan2(Mathf.Sin(theta), Mathf.Cos(theta));
+        // Lane error: cross-track + heading-error in map mode, global X + global heading otherwise.
+        float lateralErr = LaneLateralError();
+        float theta      = LaneHeadingError();
 
-        float r = -0.01f * y_ego * y_ego
+        float r = -0.01f * lateralErr * lateralErr
                   -0.04f * theta * theta
                   -0.01f * Mathf.Pow(_speed - desiredSpeed, 2f)
                   + 0.02f * _speed;
 
-        if (Mathf.Abs(y_ego) > taxiwayHalfWidth) r -= 0.5f;
+        if (Mathf.Abs(lateralErr) > taxiwayHalfWidth) r -= 0.5f;
         return r;
+    }
+
+    // Signed cross-track error to the ego path (map mode) or global X (fallback).
+    float LaneLateralError()
+    {
+        TaxiwayPath egoPath = scenarioManager != null ? scenarioManager.EgoPath : null;
+        if (network != null && egoPath != null)
+            return network.GetRelativeState(transform.position, transform.forward, egoPath).d;
+        return transform.position.x;
+    }
+
+    // Heading error vs path tangent (map mode) or global heading (fallback).
+    float LaneHeadingError()
+    {
+        TaxiwayPath egoPath = scenarioManager != null ? scenarioManager.EgoPath : null;
+        if (network != null && egoPath != null)
+            return network.GetRelativeState(transform.position, transform.forward, egoPath).thetaError;
+        float th = transform.eulerAngles.y * Mathf.Deg2Rad;
+        return Mathf.Atan2(Mathf.Sin(th), Mathf.Cos(th));
     }
 
     // ── Collision detection ────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ public enum TrajectoryMode
     Erratic,     // random heading/speed perturbations
     Stationary,  // placed on taxiway and never moves (parked vehicle / FOD)
     Accelerating,// starts slow, accelerates toward conflict point
+    FollowPath,  // drive along an assigned TaxiwayPath (GeoJSON map-based scenario)
 }
 
 /// <summary>
@@ -47,6 +48,12 @@ public class IncursionAgentController : MonoBehaviour
     [Tooltip("Acceleration rate [m/s²].")]
     public float accelRate          = 1.0f;
 
+    [Header("FollowPath (GeoJSON map mode)")]
+    [Tooltip("Set by TaxiScenarioManager. The agent follows these waypoints in order.")]
+    public TaxiwayPath assignedPath;
+    [Tooltip("Waypoint-reached radius [m].")]
+    public float pathWaypointRadius = 3f;
+
     // ── private ────────────────────────────────────────────────────────────────
 
     bool    _moving;
@@ -62,6 +69,9 @@ public class IncursionAgentController : MonoBehaviour
     float _erraticTimer;
     float _erraticSpeedOffset;
 
+    // FollowPath
+    int _pathWpIndex;
+
     // ── public API ─────────────────────────────────────────────────────────────
 
     public Vector3 CrossDirectionNormalized =>
@@ -74,7 +84,6 @@ public class IncursionAgentController : MonoBehaviour
     public void ResetCrossing(Vector3 startPos, float speed = -1f)
     {
         transform.position  = startPos;
-        _dir                = CrossDirectionNormalized;
         _topSpeed           = speed > 0f ? speed : crossSpeed;
         _speed              = trajectoryMode == TrajectoryMode.Accelerating
                                 ? _topSpeed * accelStartFraction
@@ -84,6 +93,21 @@ public class IncursionAgentController : MonoBehaviour
         _stopTimer          = 0f;
         _erraticTimer       = 0f;
         _erraticSpeedOffset = 0f;
+        _pathWpIndex        = 0;
+
+        if (trajectoryMode == TrajectoryMode.FollowPath && assignedPath != null
+            && assignedPath.Waypoints.Count > 0)
+        {
+            // Start direction is toward the first waypoint ahead of startPos
+            _pathWpIndex = FindNearestWaypointAhead(startPos);
+            Vector3 toNext = assignedPath.Waypoints[_pathWpIndex] - startPos;
+            toNext.y = 0f;
+            _dir = toNext.sqrMagnitude > 1e-6f ? toNext.normalized : Vector3.forward;
+        }
+        else
+        {
+            _dir = CrossDirectionNormalized;
+        }
 
         if (faceTravelDirection && _dir.sqrMagnitude > 1e-6f)
         {
@@ -107,6 +131,7 @@ public class IncursionAgentController : MonoBehaviour
             case TrajectoryMode.Erratic:      StepErratic();      break;
             case TrajectoryMode.Stationary:                       break; // intentionally idle
             case TrajectoryMode.Accelerating: StepAccelerating(); break;
+            case TrajectoryMode.FollowPath:   StepFollowPath();   break;
         }
     }
 
@@ -166,6 +191,49 @@ public class IncursionAgentController : MonoBehaviour
     {
         _speed = Mathf.Min(_topSpeed, _speed + accelRate * Time.fixedDeltaTime);
         transform.position += _dir * (_speed * Time.fixedDeltaTime);
+    }
+
+    void StepFollowPath()
+    {
+        if (assignedPath == null || assignedPath.Waypoints.Count == 0) return;
+
+        var wps = assignedPath.Waypoints;
+        if (_pathWpIndex >= wps.Count) { _moving = false; return; }
+
+        Vector3 target = wps[_pathWpIndex];
+        Vector3 toTarget = target - transform.position;
+        toTarget.y = 0f;
+
+        if (toTarget.sqrMagnitude < pathWaypointRadius * pathWaypointRadius)
+        {
+            _pathWpIndex++;
+            if (_pathWpIndex >= wps.Count) { _moving = false; return; }
+            toTarget = wps[_pathWpIndex] - transform.position;
+            toTarget.y = 0f;
+        }
+
+        if (toTarget.sqrMagnitude > 1e-6f) _dir = toTarget.normalized;
+
+        transform.position += _dir * (_speed * Time.fixedDeltaTime);
+
+        if (faceTravelDirection && _dir.sqrMagnitude > 1e-6f)
+            transform.rotation = Quaternion.LookRotation(frontIsNegativeZ ? -_dir : _dir, Vector3.up);
+    }
+
+    // Returns the index of the waypoint nearest to pos that is still ahead
+    // (or 0 if the path has just started).
+    int FindNearestWaypointAhead(Vector3 pos)
+    {
+        if (assignedPath == null || assignedPath.Waypoints.Count == 0) return 0;
+        float best = float.MaxValue;
+        int   idx  = 0;
+        var   wps  = assignedPath.Waypoints;
+        for (int i = 0; i < wps.Count; i++)
+        {
+            float d = Vector3.Distance(pos, wps[i]);
+            if (d < best) { best = d; idx = i; }
+        }
+        return Mathf.Min(idx + 1, wps.Count - 1);
     }
 
     // ── Gizmo ─────────────────────────────────────────────────────────────────

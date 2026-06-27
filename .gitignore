@@ -9,6 +9,18 @@ unity_ros_lidar/obj/
 unity_ros_lidar/Build/
 unity_ros_lidar/Builds/
 
+# Unity standalone build output
+unity_ros_lidar/Test_Data/
+unity_ros_lidar/UnityPlayer.so
+unity_ros_lidar/libdecor*.so*
+unity_ros_lidar/*_BurstDebugInformation_DoNotShip/
+unity_ros_lidar/Assets/ML-Agents/Timers/
+
+# Python cache
+controller/__pycache__/
+**/__pycache__/
+*.pyc
+
 unity_ros_lidar/Assets/Scenarios/SCENARIOS.md
 unity_ros_lidar/Assets/Scenarios/SCENARIOS.md.meta
 
