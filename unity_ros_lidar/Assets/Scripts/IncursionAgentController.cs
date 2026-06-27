@@ -2,91 +2,57 @@ using UnityEngine;
 
 /// <summary>
 /// Trajectory mode for this incursion agent.
-/// Set per-episode by ScenarioManager (or manually in the Inspector for testing).
 /// </summary>
 public enum TrajectoryMode
 {
-    /// <summary>Constant-velocity straight crossing (original behaviour).</summary>
-    Straight,
-    /// <summary>Constant-speed arc; turn rate = speed / curveRadius.</summary>
-    Curved,
-    /// <summary>Stops near the taxiway edge, waits, then continues.</summary>
-    StopGo,
-    /// <summary>Random heading and speed perturbations each update interval.</summary>
-    Erratic,
+    Straight,    // constant-velocity straight crossing
+    Curved,      // constant-speed arc
+    StopGo,      // stop near taxiway edge, wait, resume
+    Erratic,     // random heading/speed perturbations
+    Stationary,  // placed on taxiway and never moves (parked vehicle / FOD)
+    Accelerating,// starts slow, accelerates toward conflict point
 }
 
 /// <summary>
-/// Deterministic incursion crosser for parameterized scenario generation.
-///
-/// TaxiAgent.OnEpisodeBegin (or ScenarioManager.ResetEpisode) calls ResetCrossing()
-/// to teleport the agent to its start position and set a TrajectoryMode for the
-/// episode. The agent then moves autonomously in FixedUpdate.
-///
-/// All four modes share the same public API: ResetCrossing / StopCrossing / Velocity.
-/// Disable any Vehicle / AmbulanceTrajectorySubscriber on the same GameObject so
-/// they don't fight this controller for the Transform.
+/// Deterministic incursion crosser supporting six trajectory modes.
+/// All modes share the same public API: ResetCrossing / StopCrossing / Velocity.
 /// </summary>
 public class IncursionAgentController : MonoBehaviour
 {
-    // ── Shared settings ────────────────────────────────────────────────────────
-
     [Header("Crossing motion")]
-    [Tooltip("World-space direction the agent travels across the taxiway. " +
-             "Will be normalised. Typically perpendicular to the taxiway (±X).")]
     public Vector3 crossDirection = Vector3.right;
+    public float   crossSpeed     = 5.0f;
+    public bool    faceTravelDirection = true;
+    public bool    frontIsNegativeZ    = true;
 
-    [Tooltip("Crossing speed [m/s]. Overridden per-episode by ScenarioManager/TaxiAgent.")]
-    public float crossSpeed = 5.0f;
-
-    [Tooltip("If true, rotate to face the travel direction each reset.")]
-    public bool faceTravelDirection = true;
-
-    [Tooltip("Tick if the model's visual front points down -Z (like the ambulance/NPC cars). " +
-             "Untick for models whose front is +Z.")]
-    public bool frontIsNegativeZ = true;
-
-    // ── Trajectory mode ────────────────────────────────────────────────────────
-
-    [Header("Trajectory mode (set by ScenarioManager each episode)")]
+    [Header("Trajectory mode")]
     public TrajectoryMode trajectoryMode = TrajectoryMode.Straight;
 
-    // ── Curved mode ────────────────────────────────────────────────────────────
-
-    [Header("Curved mode")]
-    [Tooltip("Arc radius [m]. Smaller = tighter curve. Agent turns left (CCW from above).")]
+    [Header("Curved")]
     public float curveRadius = 20f;
 
-    // ── StopGo mode ────────────────────────────────────────────────────────────
-
-    [Header("StopGo mode")]
-    [Tooltip("Distance to conflictPoint (along crossing direction) at which the agent stops.")]
-    public float stopDistanceFromConflict = 6f;
-
-    [Tooltip("How long the agent waits before resuming [s].")]
-    public float stopWaitTime = 2.0f;
-
-    [Tooltip("Conflict point transform. Required for StopGo distance check. " +
-             "Assign the same ConflictPoint used by ScenarioManager/TaxiAgent.")]
+    [Header("StopGo")]
+    public float     stopDistanceFromConflict = 6f;
+    public float     stopWaitTime             = 2.0f;
     public Transform conflictPoint;
 
-    // ── Erratic mode ───────────────────────────────────────────────────────────
+    [Header("Erratic")]
+    public float erraticSpeedJitter      = 0.8f;
+    public float erraticHeadingJitter    = 0.12f;
+    public float erraticUpdateInterval   = 0.5f;
 
-    [Header("Erratic mode")]
-    [Tooltip("Speed perturbation +/- [m/s] applied each update interval.")]
-    public float erraticSpeedJitter = 0.8f;
+    [Header("Accelerating")]
+    [Tooltip("Speed at spawn (fraction of crossSpeed). Agent accelerates to crossSpeed.")]
+    public float accelStartFraction = 0.2f;
+    [Tooltip("Acceleration rate [m/s²].")]
+    public float accelRate          = 1.0f;
 
-    [Tooltip("Heading perturbation +/- [rad] applied each update interval.")]
-    public float erraticHeadingJitter = 0.12f;
-
-    [Tooltip("How often the erratic perturbation refreshes [s].")]
-    public float erraticUpdateInterval = 0.5f;
-
-    // ── Private state ──────────────────────────────────────────────────────────
+    // ── private ────────────────────────────────────────────────────────────────
 
     bool    _moving;
-    Vector3 _dir;          // current travel direction (unit vector; may rotate in Curved/Erratic)
-    float   _speed;        // base crossing speed
+    Vector3 _dir;
+    float   _speed;        // current speed (may change in Accelerating/Erratic)
+    float   _topSpeed;     // target speed for Accelerating mode
 
     // StopGo
     bool  _stopped;
@@ -96,24 +62,24 @@ public class IncursionAgentController : MonoBehaviour
     float _erraticTimer;
     float _erraticSpeedOffset;
 
-    // ── Public API ─────────────────────────────────────────────────────────────
+    // ── public API ─────────────────────────────────────────────────────────────
 
     public Vector3 CrossDirectionNormalized =>
         crossDirection.sqrMagnitude > 1e-6f ? crossDirection.normalized : Vector3.right;
 
-    /// <summary>Current world velocity. Zero when stopped or idle.</summary>
-    public Vector3 Velocity => (_moving && !_stopped) ? _dir * (_speed + _erraticSpeedOffset) : Vector3.zero;
+    public Vector3 Velocity => (_moving && !_stopped)
+        ? _dir * (_speed + _erraticSpeedOffset)
+        : Vector3.zero;
 
-    /// <summary>
-    /// Teleport to startPos and begin crossing. Called by ScenarioManager or TaxiAgent.
-    /// </summary>
     public void ResetCrossing(Vector3 startPos, float speed = -1f)
     {
-        transform.position = startPos;
-        _dir    = CrossDirectionNormalized;
-        _speed  = speed > 0f ? speed : crossSpeed;
-        _moving = true;
-
+        transform.position  = startPos;
+        _dir                = CrossDirectionNormalized;
+        _topSpeed           = speed > 0f ? speed : crossSpeed;
+        _speed              = trajectoryMode == TrajectoryMode.Accelerating
+                                ? _topSpeed * accelStartFraction
+                                : _topSpeed;
+        _moving             = true;
         _stopped            = false;
         _stopTimer          = 0f;
         _erraticTimer       = 0f;
@@ -135,14 +101,16 @@ public class IncursionAgentController : MonoBehaviour
         if (!_moving) return;
         switch (trajectoryMode)
         {
-            case TrajectoryMode.Straight: StepStraight(); break;
-            case TrajectoryMode.Curved:   StepCurved();   break;
-            case TrajectoryMode.StopGo:   StepStopGo();   break;
-            case TrajectoryMode.Erratic:  StepErratic();  break;
+            case TrajectoryMode.Straight:     StepStraight();     break;
+            case TrajectoryMode.Curved:       StepCurved();       break;
+            case TrajectoryMode.StopGo:       StepStopGo();       break;
+            case TrajectoryMode.Erratic:      StepErratic();      break;
+            case TrajectoryMode.Stationary:                       break; // intentionally idle
+            case TrajectoryMode.Accelerating: StepAccelerating(); break;
         }
     }
 
-    // ── Trajectory implementations ─────────────────────────────────────────────
+    // ── modes ──────────────────────────────────────────────────────────────────
 
     void StepStraight()
     {
@@ -158,10 +126,7 @@ public class IncursionAgentController : MonoBehaviour
         }
         transform.position += _dir * (_speed * Time.fixedDeltaTime);
         if (faceTravelDirection && _dir.sqrMagnitude > 1e-6f)
-        {
-            Vector3 faceDir = frontIsNegativeZ ? -_dir : _dir;
-            transform.rotation = Quaternion.LookRotation(faceDir, Vector3.up);
-        }
+            transform.rotation = Quaternion.LookRotation(frontIsNegativeZ ? -_dir : _dir, Vector3.up);
     }
 
     void StepStopGo()
@@ -176,9 +141,7 @@ public class IncursionAgentController : MonoBehaviour
         {
             float along = Vector3.Dot(conflictPoint.position - transform.position, _dir);
             if (along > 0f && along < stopDistanceFromConflict)
-            {
-                _stopped = true; _stopTimer = 0f; return;
-            }
+            { _stopped = true; _stopTimer = 0f; return; }
         }
         transform.position += _dir * (_speed * Time.fixedDeltaTime);
     }
@@ -196,10 +159,13 @@ public class IncursionAgentController : MonoBehaviour
         float eff = Mathf.Max(0f, _speed + _erraticSpeedOffset);
         transform.position += _dir * (eff * Time.fixedDeltaTime);
         if (faceTravelDirection && _dir.sqrMagnitude > 1e-6f)
-        {
-            Vector3 faceDir = frontIsNegativeZ ? -_dir : _dir;
-            transform.rotation = Quaternion.LookRotation(faceDir, Vector3.up);
-        }
+            transform.rotation = Quaternion.LookRotation(frontIsNegativeZ ? -_dir : _dir, Vector3.up);
+    }
+
+    void StepAccelerating()
+    {
+        _speed = Mathf.Min(_topSpeed, _speed + accelRate * Time.fixedDeltaTime);
+        transform.position += _dir * (_speed * Time.fixedDeltaTime);
     }
 
     // ── Gizmo ─────────────────────────────────────────────────────────────────

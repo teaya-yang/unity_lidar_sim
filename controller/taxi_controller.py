@@ -81,6 +81,16 @@ BIG = 300.0
 K_OBS    = 3
 OBS_SIZE = 4 + K_OBS * 4 + 2   # 18: ego(4) + K_OBS*4 + goal_dx(1) + cbf_h(1)
 
+# Scenario types — int value pushed as 'scenario_type' side channel
+SCENARIO_STANDARD    = 0
+SCENARIO_STATIONARY  = 1
+SCENARIO_HEADON      = 2
+SCENARIO_HIGHSPEED   = 3
+SCENARIO_ACCELERATING= 4
+SCENARIO_NAMES = ['standard','stationary','headon','highspeed','accelerating']
+
+V_DES_HIGH = 14.0   # high-speed scenario [m/s] (~27 knots)
+
 rng = np.random.default_rng(42)
 
 
@@ -127,6 +137,19 @@ def obs_to_state(obs: np.ndarray, prev_delta: float = 0.0, prev_accel: float = 0
         obstacles.append((obs_xy, obs_v))
 
     return s, obstacles, goal_dx
+
+
+def inject_sensor_noise(obs: np.ndarray, noise_std: float, rng_local) -> np.ndarray:
+    """
+    Add Gaussian noise to the obstacle observation slots [4..15].
+    Ego state [0..3] and goal/cbf [16..17] are not corrupted
+    (they come from onboard sensors assumed more reliable).
+    """
+    if noise_std <= 0.0:
+        return obs
+    noisy = obs.copy()
+    noisy[4:16] += rng_local.normal(0.0, noise_std, 12).astype(obs.dtype)
+    return noisy
 
 
 # ── MPPI ─────────────────────────────────────────────────────────────────────
@@ -339,7 +362,8 @@ BASE_SEED      = 1234
 CONFLICT_Z_MAX = 20.0   # max Z shift of conflict point along taxiway [m]
 
 
-def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_difficulty=1.0):
+def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_difficulty=1.0,
+                   scenario_type=SCENARIO_STANDARD):
     """
     Build a reproducible list of per-episode scenario parameter dicts.
 
@@ -358,12 +382,18 @@ def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_diff
         r = np.random.default_rng(base_seed + i)
         t = i / max(1, n_episodes - 1)   # 0 → 1
         difficulty = float(min_difficulty + t * (max_difficulty - min_difficulty))
+        # Choose scenario type if a specific one isn't forced
+        stype = float(scenario_type) if scenario_type >= 0 else float(r.integers(0, 5))
+        desired_spd = V_DES_HIGH if stype == SCENARIO_HIGHSPEED else -1.0
         scenarios.append({
             "incursion_dt":      float(dt + r.uniform(-JITTER_DT, JITTER_DT)),
             "ambulance_speed":   float(5.0 * (1.0 + r.uniform(-SPEED_JIT, SPEED_JIT))),
             "difficulty":        difficulty,
             "conflict_z_offset": float(r.uniform(-CONFLICT_Z_MAX, CONFLICT_Z_MAX)),
             "cross_dir_sign":    float(r.choice([-1.0, 1.0])),
+            "scenario_type":     stype,
+            "desired_speed":     desired_spd,
+            "head_on_prob":      0.3 if stype == SCENARIO_HEADON else 0.0,
         })
     return scenarios
 
@@ -371,7 +401,8 @@ def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_diff
 # ── Main control loop ─────────────────────────────────────────────────────────
 
 def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
-        min_difficulty=0.0, max_difficulty=1.0):
+        min_difficulty=0.0, max_difficulty=1.0,
+        noise_std=0.0, scenario_type=SCENARIO_STANDARD):
     print(f"[Controller] Connecting to Unity on port {port} ...")
     env_params = EnvironmentParametersChannel()
     env = UnityEnvironment(
@@ -405,7 +436,8 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
         env.reset()
 
     scenarios     = make_scenarios(n_episodes, min_difficulty=min_difficulty,
-                                              max_difficulty=max_difficulty)
+                                              max_difficulty=max_difficulty,
+                                              scenario_type=scenario_type)
     episode_stats = []
 
     for ep in range(n_episodes):
@@ -414,15 +446,17 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
         ep_log = {"min_h": np.inf, "min_dist": np.inf,
                   "collided": False, "reached": False, "steps": 0,
                   "incursion_dt": sc["incursion_dt"],
-                  "difficulty": sc["difficulty"]}
+                  "difficulty": sc["difficulty"],
+                  "scenario": SCENARIO_NAMES[int(sc["scenario_type"])]}
 
         for key, val in sc.items():
             env_params.set_float_parameter(key, val)
 
-        print(f"\n[Ep {ep+1:3d}] Δt={sc['incursion_dt']:+.2f}s  "
+        sname = SCENARIO_NAMES[int(sc["scenario_type"])]
+        print(f"\n[Ep {ep+1:3d}] [{sname}] Δt={sc['incursion_dt']:+.2f}s  "
               f"v_amb={sc['ambulance_speed']:.2f} m/s  "
               f"diff={sc['difficulty']:.2f}  "
-              f"zOff={sc['conflict_z_offset']:+.1f}m  "
+              f"noise={noise_std:.3f}  "
               f"dir={'L' if sc['cross_dir_sign'] < 0 else 'R'}")
 
         env.reset()
@@ -446,7 +480,8 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
             prev_x   = x_now
             ep_steps += 1
 
-            s, obstacles, goal_dx = obs_to_state(obs, delta_actual, accel_actual)
+            obs_n = inject_sensor_noise(obs, noise_std, rng)
+            s, obstacles, goal_dx = obs_to_state(obs_n, delta_actual, accel_actual)
 
             if ep_log["steps"] % 20 == 0:
                 n_obs_str = f"{len(obstacles)} obstacle(s)"
@@ -514,9 +549,9 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
     print(f"Worst min_h    : {np.min([e['min_h'] for e in episode_stats]):.2f} "
           "(target >= 0)")
 
-    print("\n  Δt[s]  diff  min_dist[m]   min_h     result")
+    print("\n  Δt[s]  scenario      diff  min_dist[m]   min_h     result")
     for e in sorted(episode_stats, key=lambda d: d["incursion_dt"]):
-        print(f"  {e['incursion_dt']:+5.2f}  {e['difficulty']:.2f}  "
+        print(f"  {e['incursion_dt']:+5.2f}  {e['scenario']:<12s}  {e['difficulty']:.2f}  "
               f"{e['min_dist']:8.2f}   {e['min_h']:8.2f}   "
               f"{'COLLISION' if e['collided'] else 'safe'}")
     return episode_stats
@@ -528,15 +563,21 @@ if __name__ == "__main__":
     p.add_argument("--port",           default=5004,  type=int)
     p.add_argument("--sysid",          default=True,  type=lambda x: x.lower() == "true")
     p.add_argument("--episodes",       default=20,    type=int)
-    p.add_argument("--min-difficulty", default=0.0,   type=float,
-                   help="Floor of the difficulty ramp (0-1). 0.85 forces 3-agent Erratic.")
-    p.add_argument("--max-difficulty", default=1.0,   type=float,
-                   help="Ceiling of the difficulty ramp (0-1).")
+    p.add_argument("--min-difficulty", default=0.0,   type=float)
+    p.add_argument("--max-difficulty", default=1.0,   type=float)
+    p.add_argument("--noise-std",      default=0.0,   type=float,
+                   help="Std-dev of Gaussian noise injected into obstacle obs [m]. 0=off.")
+    p.add_argument("--scenario",       default="standard",
+                   choices=SCENARIO_NAMES,
+                   help="Force a specific scenario type for all episodes.")
     args = p.parse_args()
 
+    sc_int = SCENARIO_NAMES.index(args.scenario)
     run(unity_exec_path=args.exec if args.exec != "None" else None,
         port=args.port,
         run_sysid=args.sysid,
         n_episodes=args.episodes,
         min_difficulty=args.min_difficulty,
-        max_difficulty=args.max_difficulty)
+        max_difficulty=args.max_difficulty,
+        noise_std=args.noise_std,
+        scenario_type=sc_int)

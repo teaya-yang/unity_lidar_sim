@@ -146,7 +146,15 @@ public class TaxiAgent : Unity.MLAgents.Agent
 
             float conflictZOffset = ep.GetWithDefault("conflict_z_offset", float.NaN);
             float crossDirSign    = ep.GetWithDefault("cross_dir_sign",    0f);
-            scenarioManager.ResetEpisode(difficulty, desiredSpeed, transform, incursionDt, ambulanceSpeed, conflictZOffset, crossDirSign);
+            int   scenarioType    = (int)ep.GetWithDefault("scenario_type",  0f);
+            float headOnProb      = ep.GetWithDefault("head_on_prob",       0f);
+            float episodeSpeed    = ep.GetWithDefault("desired_speed",      -1f);
+            if (episodeSpeed > 0f) _speed = episodeSpeed;
+            scenarioManager.ResetEpisode(
+                difficulty,
+                episodeSpeed > 0f ? episodeSpeed : desiredSpeed,
+                transform, incursionDt, ambulanceSpeed,
+                conflictZOffset, crossDirSign, scenarioType, headOnProb);
         }
         // ── Legacy single-agent path ──────────────────────────────────────────
         else if (incursionController != null && conflictPoint != null)
