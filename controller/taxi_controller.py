@@ -456,6 +456,7 @@ def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_diff
         stype = float(scenario_type) if scenario_type >= 0 else float(r.integers(0, 5))
         desired_spd = V_DES_HIGH if stype == SCENARIO_HIGHSPEED else -1.0
         scenarios.append({
+            "episode_seed":      float(base_seed + i),   # deterministic Unity path/obstacle selection
             "incursion_dt":      float(dt + r.uniform(-JITTER_DT, JITTER_DT)),
             "ambulance_speed":   float(5.0 * (1.0 + r.uniform(-SPEED_JIT, SPEED_JIT))),
             "difficulty":        difficulty,
@@ -479,7 +480,7 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
         file_name=unity_exec_path,
         base_port=port,
         seed=42,
-        no_graphics=False,
+        no_graphics=unity_exec_path is not None,  # headless when running a build
         side_channels=[env_params],
     )
     env.reset()

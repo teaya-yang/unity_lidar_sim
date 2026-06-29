@@ -29,6 +29,15 @@ public class TaxiwayPath
     public float   TotalLength      => CumulativeLength != null && CumulativeLength.Length > 0
                                         ? CumulativeLength[CumulativeLength.Length - 1] : 0f;
 
+    // GeoJSON feature metadata (OSM aeroway tags). Empty/0 when absent.
+    public string AerowayType = "";   // "taxiway", "apron", "runway"
+    public string Ref         = "";   // taxiway letter / runway designation, e.g. "F", "10L/28R"
+    public string Name        = "";   // human name, e.g. "Boarding Area E"
+    public float  Width       = 0f;   // metres, 0 = unknown
+
+    // True only for paths the ego may be assigned to (linear taxi routes).
+    public bool IsTaxiway => AerowayType == "taxiway";
+
     // Sharpest turn between consecutive segments [deg]. Used to skip un-navigable
     // paths (corners tighter than the aircraft's steering can follow).
     public float MaxTurnDeg { get; private set; }
@@ -81,12 +90,24 @@ public class TaxiwayNetwork : MonoBehaviour
     [Tooltip("Two path segments are considered intersecting when their closest approach is within this distance [m].")]
     public float intersectionThreshold = 5f;
 
+    [Header("Runtime visualisation")]
+    [Tooltip("Draw coloured LineRenderers for each path at startup (visible in Game view and builds).")]
+    public bool drawAtRuntime = true;
+    [Tooltip("Width of the rendered centreline [m].")]
+    public float lineWidth = 1.0f;
+    [Tooltip("Y height of the drawn lines above ground [m].")]
+    public float lineHeight = 0.3f;
+
     public IReadOnlyList<TaxiwayPath> Paths => _paths;
     readonly List<TaxiwayPath> _paths = new List<TaxiwayPath>();
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    void Awake() => LoadMapData();
+    void Awake()
+    {
+        LoadMapData();
+        if (drawAtRuntime) DrawNetworkRuntime();
+    }
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -128,8 +149,34 @@ public class TaxiwayNetwork : MonoBehaviour
                 rawCoords = (geom["coordinates"] as JArray)?[0] as JArray; // outer ring only
 
             var path = BuildPath(rawCoords);
-            if (path != null) _paths.Add(path);
+            if (path == null) continue;
+
+            // Attach OSM aeroway metadata from the feature's properties.
+            var props = feature?["properties"];
+            if (props != null)
+            {
+                path.AerowayType = (string)props["aeroway"] ?? "";
+                path.Ref         = (string)props["ref"]     ?? "";
+                path.Name        = (string)props["name"]    ?? "";
+                if (props["width"] != null &&
+                    float.TryParse((string)props["width"],
+                                   System.Globalization.NumberStyles.Float,
+                                   System.Globalization.CultureInfo.InvariantCulture,
+                                   out float w))
+                    path.Width = w;
+            }
+
+            _paths.Add(path);
         }
+
+        int nTaxi = 0, nApron = 0, nRunway = 0;
+        foreach (var p in _paths)
+        {
+            if      (p.AerowayType == "taxiway") nTaxi++;
+            else if (p.AerowayType == "apron")   nApron++;
+            else if (p.AerowayType == "runway")  nRunway++;
+        }
+        Debug.Log($"[TaxiwayNetwork] Types: {nTaxi} taxiway, {nApron} apron, {nRunway} runway.", this);
 
         Debug.Log($"[TaxiwayNetwork] Loaded {_paths.Count} path(s) from '{geoJsonFileName}'.", this);
     }
@@ -285,6 +332,46 @@ public class TaxiwayNetwork : MonoBehaviour
         }
         c1 = p1 + d1 * s;
         c2 = p3 + d2 * t;
+    }
+
+    // ── Runtime visualisation ─────────────────────────────────────────────────
+
+    void DrawNetworkRuntime()
+    {
+        // One child GameObject + LineRenderer per path, parented to this object.
+        for (int pi = 0; pi < _paths.Count; pi++)
+        {
+            var wps = _paths[pi].Waypoints;
+            if (wps.Count < 2) continue;
+
+            var go = new GameObject($"Path_{pi}");
+            go.transform.SetParent(transform, worldPositionStays: false);
+
+            var lr = go.AddComponent<LineRenderer>();
+            lr.useWorldSpace   = true;
+            lr.positionCount   = wps.Count;
+            lr.startWidth      = lineWidth;
+            lr.endWidth        = lineWidth;
+            lr.material        = new Material(Shader.Find("Sprites/Default"));
+            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            lr.receiveShadows  = false;
+
+            // Colour by aeroway type (standard airport-chart-ish convention):
+            //   taxiway = yellow, runway = red, apron = cyan, unknown = grey.
+            Color c;
+            switch (_paths[pi].AerowayType)
+            {
+                case "taxiway": c = Color.yellow;                 break;
+                case "runway":  c = Color.red;                    break;
+                case "apron":   c = Color.cyan;                   break;
+                default:        c = new Color(0.6f, 0.6f, 0.6f);  break;
+            }
+            lr.startColor = c;
+            lr.endColor   = c;
+
+            for (int i = 0; i < wps.Count; i++)
+                lr.SetPosition(i, wps[i] + Vector3.up * lineHeight);
+        }
     }
 
     // ── Gizmos ────────────────────────────────────────────────────────────────

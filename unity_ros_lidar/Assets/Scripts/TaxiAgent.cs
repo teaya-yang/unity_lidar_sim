@@ -167,6 +167,14 @@ public class TaxiAgent : Unity.MLAgents.Agent
             float headOnProb      = ep.GetWithDefault("head_on_prob",       0f);
             float episodeSpeed    = ep.GetWithDefault("desired_speed",      -1f);
             if (episodeSpeed > 0f) _speed = episodeSpeed;
+
+            // Deterministic map/path selection: when Python supplies a per-episode
+            // seed, re-seed Unity's RNG so the ego path (and obstacle assignment)
+            // are reproducible across runs — required for a fair CBF vs no-CBF
+            // comparison on identical geometry.
+            float episodeSeed = ep.GetWithDefault("episode_seed", -1f);
+            if (episodeSeed >= 0f) Random.InitState(Mathf.RoundToInt(episodeSeed));
+
             scenarioManager.ResetEpisode(
                 difficulty,
                 episodeSpeed > 0f ? episodeSpeed : desiredSpeed,

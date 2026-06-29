@@ -56,6 +56,10 @@ public class TaxiScenarioManager : MonoBehaviour
     public float minEgoPathLength = 60f;
     [Tooltip("Never spawn an obstacle closer than this [m] to the ego at episode start.")]
     public float minObstacleSpawnDist = 15f;
+    [Tooltip("How far ahead (in seconds of ego travel) a conflict point may be and still " +
+             "be reachable within the episode. Obstacles are only assigned to intersections " +
+             "the ego can actually reach in time — keep slightly below TaxiAgent.maxEpisodeSeconds.")]
+    public float episodeReachSeconds = 55f;
 
     // ── public read-only ───────────────────────────────────────────────────────
     public IReadOnlyList<IncursionAgentController> ActiveAgents => _active;
@@ -197,11 +201,16 @@ public class TaxiScenarioManager : MonoBehaviour
     {
         var paths = network.Paths;
 
-        // Pick a random NAVIGABLE path for the ego (skip ones with corners the aircraft
-        // cannot physically steer through — they cause the plane to leave the lane and stall).
+        // Pick a random NAVIGABLE path for the ego. Constraints:
+        //   • must be a taxiway (not a runway or apron — those are wrong geometry/scale
+        //     for a 8 m/s taxi sim: runways are 3.6 km straights, aprons are area perimeters);
+        //   • corners must be gentle enough for the aircraft to steer through;
+        //   • long enough to be a meaningful route.
         var navigable = new List<int>();
         for (int pi = 0; pi < paths.Count; pi++)
-            if (paths[pi].MaxTurnDeg <= maxEgoTurnDeg && paths[pi].TotalLength >= minEgoPathLength)
+            if (paths[pi].IsTaxiway &&
+                paths[pi].MaxTurnDeg <= maxEgoTurnDeg &&
+                paths[pi].TotalLength >= minEgoPathLength)
                 navigable.Add(pi);
 
         int egoPathIdx = navigable.Count > 0
@@ -224,21 +233,33 @@ public class TaxiScenarioManager : MonoBehaviour
         TrajectoryMode[] modes;
         ResolveLayout((ScenarioType)scenarioType, difficulty, _pool.Count, out nActive, out modes);
 
-        // Collect candidate intersecting paths (exclude the ego's own path)
-        var candidatePaths = new List<(TaxiwayPath path, Vector3 intersection)>();
+        // Ego's current arc position and how far it can travel this episode.
+        float egoArcStart  = network.GetRelativeState(
+                                 aircraftTransform.position, Vector3.forward, EgoPath).s;
+        float reachableArc = aircraftSpeed * episodeReachSeconds;
+
+        // Collect candidate intersecting paths (exclude the ego's own path), keeping the
+        // ego-arc of each conflict point so we can reject ones the ego can't reach in time.
+        var candidatePaths = new List<(TaxiwayPath path, Vector3 intersection, float egoArc)>();
         for (int pi = 0; pi < paths.Count; pi++)
         {
             if (pi == egoPathIdx) continue;
-            if (network.TryFindIntersection(EgoPath, paths[pi], out Vector3 ix))
-                candidatePaths.Add((paths[pi], ix));
+            if (!network.TryFindIntersection(EgoPath, paths[pi], out Vector3 ix)) continue;
+
+            float egoArc  = network.GetRelativeState(ix, Vector3.forward, EgoPath).s;
+            float ahead   = egoArc - egoArcStart;
+            // Only keep conflicts ahead of the ego and reachable before timeout.
+            if (ahead < minObstacleSpawnDist || ahead > reachableArc) continue;
+            candidatePaths.Add((paths[pi], ix, egoArc));
         }
 
-        // Shuffle candidates so agent assignments vary
-        for (int i = candidatePaths.Count - 1; i > 0; i--)
-        {
-            int j = Random.Range(0, i + 1);
-            var tmp = candidatePaths[i]; candidatePaths[i] = candidatePaths[j]; candidatePaths[j] = tmp;
-        }
+        // Nearest reachable conflicts first, so the assigned obstacles reliably produce an
+        // in-window encounter rather than a fly-by the ego never reaches.
+        candidatePaths.Sort((a, b) => a.egoArc.CompareTo(b.egoArc));
+
+        if (candidatePaths.Count < nActive)
+            Debug.Log($"[TaxiScenarioManager] (map) only {candidatePaths.Count} reachable " +
+                      $"conflict(s) within {reachableArc:F0}m for {nActive} agent(s).");
 
         for (int i = 0; i < nActive; i++)
         {
@@ -247,28 +268,27 @@ public class TaxiScenarioManager : MonoBehaviour
 
             TaxiwayPath obsPath;
             Vector3 conflictPt;
+            float   egoArcConflict;
 
             if (i < candidatePaths.Count)
             {
-                (obsPath, conflictPt) = candidatePaths[i];
+                (obsPath, conflictPt, egoArcConflict) = candidatePaths[i];
             }
             else
             {
-                // No intersecting path found for this slot — fall back to a random path
+                // No reachable intersecting path for this slot — fall back to a random path.
+                // (This agent likely won't produce a conflict; it pads the obstacle count.)
                 obsPath    = paths[Random.Range(0, paths.Count)];
                 conflictPt = obsPath.Waypoints.Count > 0
                     ? obsPath.Waypoints[obsPath.Waypoints.Count / 2]
                     : Vector3.zero;
+                egoArcConflict = network.GetRelativeState(conflictPt, Vector3.forward, EgoPath).s;
             }
 
             // Time for the EGO to reach the intersection: arc-length from the ego's current
             // position to the conflict point, along the EGO path — NOT to the path end.
-            float egoArcNow      = network.GetRelativeState(
-                                      aircraftTransform.position, Vector3.forward, EgoPath).s;
-            float egoArcConflict = network.GetRelativeState(
-                                      conflictPt, Vector3.forward, EgoPath).s;
             float egoTtc = Mathf.Max(0f,
-                (egoArcConflict - egoArcNow) / Mathf.Max(1f, aircraftSpeed));
+                (egoArcConflict - egoArcStart) / Mathf.Max(1f, aircraftSpeed));
 
             float dtOffset = baseDt + i * 1.5f;
             float spd      = ambulanceSpeed * (1f + i * speedVariation);
