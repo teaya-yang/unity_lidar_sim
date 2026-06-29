@@ -293,11 +293,21 @@ public class TaxiScenarioManager : MonoBehaviour
             float dtOffset = baseDt + i * 1.5f;
             float spd      = ambulanceSpeed * (1f + i * speedVariation);
 
-            // Place the obstacle UPSTREAM on its own path so it reaches the conflict point
-            // at the same time as the ego (offset by dtOffset for staggering).
             PathState obsState = network.GetRelativeState(conflictPt, Vector3.forward, obsPath);
-            float     obsArc   = obsState.s - spd * (egoTtc + dtOffset);
-            obsArc             = Mathf.Clamp(obsArc, 0f, obsPath.TotalLength);
+
+            // Where to place the obstacle along its own path (arc-length).
+            float obsArc;
+            if (modes[i] == TrajectoryMode.Stationary)
+                // Disabled vehicle / FOD blocking the ego's taxiway: park it ON the
+                // conflict point (which lies on the EGO path) so the ego must detect
+                // it and stop — not off on a side taxiway, where the upstream offset
+                // below would otherwise strand a never-moving obstacle.
+                obsArc = obsState.s;
+            else
+                // Moving obstacle: place UPSTREAM so it reaches the conflict point at
+                // the same time as the ego (offset by dtOffset for staggering).
+                obsArc = obsState.s - spd * (egoTtc + dtOffset);
+            obsArc = Mathf.Clamp(obsArc, 0f, obsPath.TotalLength);
 
             // Walk the arc to find world position
             Vector3 spawnPos = ArcToWorldPosition(obsPath, obsArc);

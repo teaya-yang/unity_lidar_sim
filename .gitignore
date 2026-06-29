@@ -31,4 +31,7 @@ nuscenes*
 # Remove venv
 venv/
 
+Test_Data/
+*.x86_64
+
 TODO_CLAUDE.md

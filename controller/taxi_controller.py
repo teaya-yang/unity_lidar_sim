@@ -450,9 +450,14 @@ def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_diff
     scenarios = []
     for i, dt in enumerate(grid):
         r = np.random.default_rng(base_seed + i)
-        t = i / max(1, n_episodes - 1)   # 0 → 1
-        difficulty = float(min_difficulty + t * (max_difficulty - min_difficulty))
-        # Choose scenario type if a specific one isn't forced
+        # Difficulty is drawn INDEPENDENTLY of Δt so the (Δt × difficulty) plane is
+        # actually sampled, not walked along its diagonal. (Previously difficulty
+        # ramped with the episode index, perfectly correlating it with Δt and making
+        # it impossible to attribute a failure to timing vs. scenario complexity.)
+        # The Δt grid still spans [-DT_SPAN, DT_SPAN] for full timing coverage.
+        difficulty = float(r.uniform(min_difficulty, max_difficulty))
+        # Scenario type: forced when scenario_type >= 0, else drawn per-episode
+        # across all five types ("mixed" mode, scenario_type = -1).
         stype = float(scenario_type) if scenario_type >= 0 else float(r.integers(0, 5))
         desired_spd = V_DES_HIGH if stype == SCENARIO_HIGHSPEED else -1.0
         scenarios.append({
@@ -631,12 +636,24 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
     print("\n=== Summary ===")
     n   = len(episode_stats)
     col = sum(1 for e in episode_stats if e["collided"])
+    dists = [e["min_dist"] for e in episode_stats]
     print(f"Collision rate : {col}/{n} = {col/n:.1%}")
-    print(f"Mean min_dist  : {np.mean([e['min_dist'] for e in episode_stats]):.2f} m")
-    print(f"Worst min_dist : {np.min([e['min_dist'] for e in episode_stats]):.2f} m "
+    print(f"Mean min_dist  : {np.mean(dists):.2f} m  "
+          f"(median {np.median(dists):.2f} m — use median; no-conflict duds skew the mean)")
+    print(f"Worst min_dist : {np.min(dists):.2f} m "
           f"(target >= {D_SAFE:.1f} m)")
     print(f"Worst min_h    : {np.min([e['min_h'] for e in episode_stats]):.2f} "
           "(target >= 0)")
+
+    # ── Per-scenario-type breakdown ───────────────────────────────────────────
+    print("\n  scenario      episodes  collisions   rate   median min_dist[m]")
+    for name in SCENARIO_NAMES:
+        grp = [e for e in episode_stats if e["scenario"] == name]
+        if not grp:
+            continue
+        g_col = sum(1 for e in grp if e["collided"])
+        g_med = np.median([e["min_dist"] for e in grp])
+        print(f"  {name:<12s}  {len(grp):8d}  {g_col:10d}   {g_col/len(grp):5.1%}   {g_med:14.2f}")
 
     print("\n  Δt[s]  scenario      diff  min_dist[m]   min_h     result")
     for e in sorted(episode_stats, key=lambda d: d["incursion_dt"]):
@@ -657,14 +674,15 @@ if __name__ == "__main__":
     p.add_argument("--noise-std",      default=0.0,   type=float,
                    help="Std-dev of Gaussian noise injected into obstacle obs [m]. 0=off.")
     p.add_argument("--scenario",       default="standard",
-                   choices=SCENARIO_NAMES,
-                   help="Force a specific scenario type for all episodes.")
+                   choices=SCENARIO_NAMES + ["mixed"],
+                   help="Force a specific scenario type for all episodes, or "
+                        "'mixed' to randomise across all five types per episode.")
     p.add_argument("--no-cbf",         action="store_true",
                    help="Disable the HOCBF-QP safety filter (MPPI only). "
                         "Use for ablation baseline.")
     args = p.parse_args()
 
-    sc_int = SCENARIO_NAMES.index(args.scenario)
+    sc_int = -1 if args.scenario == "mixed" else SCENARIO_NAMES.index(args.scenario)
     run(unity_exec_path=args.exec if args.exec != "None" else None,
         port=args.port,
         run_sysid=args.sysid,
