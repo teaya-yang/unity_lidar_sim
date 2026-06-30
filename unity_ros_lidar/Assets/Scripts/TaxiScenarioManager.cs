@@ -45,6 +45,18 @@ public class TaxiScenarioManager : MonoBehaviour
     public float lateralSpread           = 3f;
     public float speedVariation          = 0.05f;
 
+    [Header("Compound conflicts (Lever 2)")]
+    [Tooltip("Enable multi-agent conflicts that share a timing window so avoiding one " +
+             "obstacle forces the ego toward another. When off, secondary agents are " +
+             "staggered 1.5 s apart (ambient traffic, the legacy behaviour).")]
+    public bool  compoundConflicts   = true;
+    [Tooltip("Difficulty at/above which secondary agents converge on the conflict window " +
+             "instead of being staggered out of it.")]
+    public float compoundDifficulty  = 0.7f;
+    [Tooltip("Half-width of the converging arrival window [s]. Secondary agents arrive within " +
+             "±this of the ego, from alternating sides, creating a genuine go/stop dilemma.")]
+    public float compoundDtWindow     = 0.6f;
+
     [Header("GeoJSON map integration (optional)")]
     [Tooltip("Assign to enable map-based ego spawning and path-following obstacles. " +
              "Leave null to use the legacy conflict-point layout.")]
@@ -146,7 +158,7 @@ public class TaxiScenarioManager : MonoBehaviour
             float egoTtc = Mathf.Max(0f,
                 (effectiveCP.z - aircraftTransform.position.z) / Mathf.Max(1f, aircraftSpeed));
 
-            float dtOffset = baseDt + i * 1.5f;
+            float dtOffset = CompoundDtOffset(baseDt, i, difficulty);
             float spd      = ambulanceSpeed * (1f + i * speedVariation);
 
             // ── Head-on scenario: some agents travel along taxiway axis (±Z) ──
@@ -290,7 +302,7 @@ public class TaxiScenarioManager : MonoBehaviour
             float egoTtc = Mathf.Max(0f,
                 (egoArcConflict - egoArcStart) / Mathf.Max(1f, aircraftSpeed));
 
-            float dtOffset = baseDt + i * 1.5f;
+            float dtOffset = CompoundDtOffset(baseDt, i, difficulty);
             float spd      = ambulanceSpeed * (1f + i * speedVariation);
 
             PathState obsState = network.GetRelativeState(conflictPt, Vector3.forward, obsPath);
@@ -357,6 +369,25 @@ public class TaxiScenarioManager : MonoBehaviour
         return wps[wps.Count - 1];
     }
 
+    // ── compound timing (Lever 2) ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Arrival-time offset for agent i. Legacy behaviour staggers each secondary
+    /// agent 1.5 s later (ambient traffic that the ego never co-occupies). When
+    /// compound conflicts are enabled and difficulty is high enough, secondaries
+    /// instead CONVERGE within ±compoundDtWindow of the ego's arrival, from
+    /// alternating sides — so evading the primary steers into a secondary.
+    /// </summary>
+    float CompoundDtOffset(float baseDt, int i, float difficulty)
+    {
+        bool compound = compoundConflicts && difficulty >= compoundDifficulty;
+        if (!compound) return baseDt + i * 1.5f;   // legacy staggered ambient traffic
+        if (i == 0)    return baseDt;              // primary arrives with the ego
+        float side = (i % 2 == 1) ? 1f : -1f;      // alternate which side arrives first
+        int   step = (i + 1) / 2;                  // 1,1,2,2,… grows the window slowly
+        return baseDt + side * compoundDtWindow * step;
+    }
+
     // ── layout table ──────────────────────────────────────────────────────────
 
     static void ResolveLayout(ScenarioType type, float d, int poolSize,
@@ -365,14 +396,35 @@ public class TaxiScenarioManager : MonoBehaviour
         switch (type)
         {
             case ScenarioType.Stationary:
-                nActive = 1;
-                modes   = new[] { TrajectoryMode.Stationary };
+                // Lever 2: at high difficulty, pair the parked blockage with a crosser.
+                // The ego's go-around swerve around the stationary obstacle then has to
+                // contend with a moving agent crossing the swerve path — the compound
+                // "avoid A forces you toward B" dilemma.
+                if (d >= 0.7f)
+                {
+                    nActive = 2;
+                    modes   = new[] { TrajectoryMode.Stationary, TrajectoryMode.Straight };
+                }
+                else
+                {
+                    nActive = 1;
+                    modes   = new[] { TrajectoryMode.Stationary };
+                }
                 break;
 
             case ScenarioType.HeadOn:
-                // Head-on: always Straight mode, direction handled in ResetEpisode
-                nActive = 1;
-                modes   = new[] { TrajectoryMode.Straight };
+                // Lever 2: head-on blocker plus a crosser at the same window at high difficulty,
+                // so sidestepping the oncoming agent steers into a crossing conflict.
+                if (d >= 0.7f)
+                {
+                    nActive = 2;
+                    modes   = new[] { TrajectoryMode.Straight, TrajectoryMode.Straight };
+                }
+                else
+                {
+                    nActive = 1;
+                    modes   = new[] { TrajectoryMode.Straight };
+                }
                 break;
 
             case ScenarioType.Accelerating:

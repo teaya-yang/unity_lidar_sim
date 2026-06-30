@@ -74,12 +74,18 @@ H_MPPI    = 25           # planning horizon (steps)
 K_MPPI    = 1500         # rollout samples
 LAMBDA    = 1.0          # MPPI temperature
 SIG_A     = 1.0          # noise std for acceleration samples
-SIG_D     = 0.12         # noise std for steering samples
+SIG_D     = 0.35         # noise std for steering samples
 
 # MPPI stage costs
 W_LAT, W_HEAD, W_V, W_CTRL = 3.0, 6.0, 1.2, 0.05
-W_OBS, W_OFF, W_PROG        = 12.0, 200.0, 0.4
+W_OBS, W_OFF, W_PROG        = 12.0, 2.0, 0.4
+W_OFF_BYPASS = 2.0    # relaxed lane penalty when a blocking obstacle is ahead
+D_BYPASS     = 35.0   # trigger range: on-lane obstacle within this distance [m]
+LAT_GOAROUND = 1.5    # lateral offset [m] at which ego is considered committed to a go-around
 BIG = 300.0
+
+SIG_D_BYPASS  = 0.35  # wide steering noise to sample go-around rollouts
+ALPHA_W_GOAROUND = 0.2  # QP steering weight during go-around (vs ALPHA_W=6 normally)
 
 # Number of obstacles packed in the observation vector (must match TaxiAgent K_OBS)
 K_OBS    = 3
@@ -235,7 +241,18 @@ def mppi(s0, mean, obstacles, goal, frenet_mode=False, tangent=None):
 
     Returns (u_nom, new_mean).
     """
-    noise = rng.normal(0, [SIG_A, SIG_D], (K_MPPI, H_MPPI, 2))
+    # Widen steering noise and relax lane penalty when a stationary/slow obstacle
+    # blocks the lane ahead — gives MPPI enough samples to find a go-around path.
+    sig_d_eff = SIG_D
+    w_off_eff = W_OFF
+    for rel_xy, obs_v in obstacles:
+        obs_spd = float(np.hypot(obs_v[0], obs_v[1]))
+        if 0 < rel_xy[0] < D_BYPASS and abs(rel_xy[1]) < W_HALF and obs_spd < 2.0:
+            sig_d_eff = SIG_D_BYPASS
+            w_off_eff = W_OFF_BYPASS
+            break
+
+    noise = rng.normal(0, [SIG_A, sig_d_eff], (K_MPPI, H_MPPI, 2))
     na    = mean + noise
     na[:, :, 0] = np.clip(na[:, :, 0], A_MIN, A_MAX)
     na[:, :, 1] = np.clip(na[:, :, 1], -DELTA_LIM, DELTA_LIM)
@@ -268,11 +285,11 @@ def mppi(s0, mean, obstacles, goal, frenet_mode=False, tangent=None):
             theta_e = th_tan - th
             cost += W_LAT  * d_t**2
             cost += W_HEAD * theta_e**2
-            cost += np.where(np.abs(d_t) > W_HALF, W_OFF * (np.abs(d_t) - W_HALF)**2, 0.)
+            cost += np.where(np.abs(d_t) > W_HALF, w_off_eff * (np.abs(d_t) - W_HALF)**2, 0.)
         else:
             cost += W_LAT  * lat**2
             cost += W_HEAD * th**2
-            cost += np.where(np.abs(lat) > W_HALF, W_OFF * (np.abs(lat) - W_HALF)**2, 0.)
+            cost += np.where(np.abs(lat) > W_HALF, w_off_eff * (np.abs(lat) - W_HALF)**2, 0.)
 
         cost += W_V    * (vv - V_DES)**2
         cost += W_CTRL * (na[:, k, 0]**2 + 4. * na[:, k, 1]**2)
@@ -344,7 +361,7 @@ def hocbf_constraint(s, u_nom, rel_xy, obs_v):
     return np.array([dHH_da, dHH_dd]), rhs
 
 
-def cbf_qp(s, u_nom, obstacles):
+def cbf_qp(s, u_nom, obstacles, lat=0.0):
     """
     Solve the safety QP with one constraint row per obstacle:
         min  (u - u_nom)^T W (u - u_nom)
@@ -352,13 +369,16 @@ def cbf_qp(s, u_nom, obstacles):
              A_MIN <= a <= A_MAX
              |delta| <= DELTA_LIM
 
+    lat: current lateral offset [m] — used to detect committed go-around.
     Returns (u_cmd, cbf_engaged).
     """
     a_nom = float(np.clip(u_nom[0], A_MIN, A_MAX))
     d_nom = float(np.clip(u_nom[1], -DELTA_LIM, DELTA_LIM))
     u_n   = np.array([a_nom, d_nom])
 
-    W = np.diag([1., ALPHA_W])
+    # During a go-around (large lateral offset), strongly prefer steering over braking
+    alpha_w = ALPHA_W_GOAROUND if abs(lat) > LAT_GOAROUND else ALPHA_W
+    W = np.diag([1., alpha_w])
     c = W @ u_n
 
     # Box constraints: a >= A_MIN, a <= A_MAX, delta >= -DELTA_LIM, delta <= DELTA_LIM
@@ -431,6 +451,23 @@ SPEED_JIT      = 0.10
 BASE_SEED      = 1234
 CONFLICT_Z_MAX = 20.0   # max Z shift of conflict point along taxiway [m]
 
+# Lever 1 — speed scales with difficulty ONLY for head-on (longitudinal) conflicts,
+# where higher closing speed genuinely compresses the reaction window. For
+# PERPENDICULAR crossers (standard/highspeed) a faster mover spends LESS time in
+# the conflict zone (t_window ~ vehicle_size / speed), so speed scaling makes
+# crossings EASIER, not harder — confirmed empirically. Crossers stay slow so they
+# linger in the conflict zone; difficulty is raised via Lever 2 (compound conflicts)
+# instead. Stationary ignores speed entirely (parked).
+SPEED_CROSS_BASE   = 5.0    # perpendicular crosser speed [m/s] — kept low on purpose
+SPEED_HEADON_MIN   = 5.0    # head-on closing speed at difficulty 0 [m/s]
+SPEED_HEADON_MAX   = 12.0   # head-on closing speed at difficulty 1 [m/s]
+
+# Lever 3 — concentrate Δt near the conflict (was a uniform linspace).
+# A power-warped grid keeps the full [-DT_SPAN, DT_SPAN] coverage at the
+# extremes but packs most episodes near Δt=0 where genuine conflicts live,
+# raising difficulty density and shrinking the no-conflict "dud" tail.
+DT_CONCENTRATION = 2.0  # >1 concentrates toward 0; 1.0 = uniform (old behaviour)
+
 
 def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_difficulty=1.0,
                    scenario_type=SCENARIO_STANDARD):
@@ -446,7 +483,10 @@ def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_diff
     min_difficulty / max_difficulty clamp the ramp so you can test a specific
     difficulty band. E.g. min_difficulty=0.85 forces 3-agent Erratic scenarios.
     """
-    grid = np.linspace(-DT_SPAN, DT_SPAN, n_episodes)
+    # Lever 3: power-warp a uniform [-1, 1] grid so density concentrates near 0
+    # while the extremes still reach ±DT_SPAN (full timing coverage preserved).
+    u    = np.linspace(-1.0, 1.0, n_episodes)
+    grid = DT_SPAN * np.sign(u) * np.abs(u) ** DT_CONCENTRATION
     scenarios = []
     for i, dt in enumerate(grid):
         r = np.random.default_rng(base_seed + i)
@@ -460,10 +500,18 @@ def make_scenarios(n_episodes, base_seed=BASE_SEED, min_difficulty=0.0, max_diff
         # across all five types ("mixed" mode, scenario_type = -1).
         stype = float(scenario_type) if scenario_type >= 0 else float(r.integers(0, 5))
         desired_spd = V_DES_HIGH if stype == SCENARIO_HIGHSPEED else -1.0
+        # Lever 1: only head-on closing speed ramps with difficulty; perpendicular
+        # crossers stay slow (so they linger in the conflict zone). Stationary mode
+        # ignores this Unity-side; the MPPI bypass keys on the observed velocity, so
+        # a parked obstacle stays parked regardless.
+        if stype == SCENARIO_HEADON:
+            spd_base = SPEED_HEADON_MIN + (SPEED_HEADON_MAX - SPEED_HEADON_MIN) * difficulty
+        else:
+            spd_base = SPEED_CROSS_BASE
         scenarios.append({
             "episode_seed":      float(base_seed + i),   # deterministic Unity path/obstacle selection
             "incursion_dt":      float(dt + r.uniform(-JITTER_DT, JITTER_DT)),
-            "ambulance_speed":   float(5.0 * (1.0 + r.uniform(-SPEED_JIT, SPEED_JIT))),
+            "ambulance_speed":   float(spd_base * (1.0 + r.uniform(-SPEED_JIT, SPEED_JIT))),
             "difficulty":        difficulty,
             "conflict_z_offset": float(r.uniform(-CONFLICT_Z_MAX, CONFLICT_Z_MAX)),
             "cross_dir_sign":    float(r.choice([-1.0, 1.0])),
@@ -587,7 +635,7 @@ def run(unity_exec_path=None, port=5004, run_sysid=True, n_episodes=20,
                     s_cbf    = np.array([0.0, 0.0, th_world, s[3]])
                 else:
                     s_cbf    = s[:4]
-                u_cmd, cbf_engaged = cbf_qp(s_cbf, u_nom, obstacles)
+                u_cmd, cbf_engaged = cbf_qp(s_cbf, u_nom, obstacles, lat=float(s[1]))
             a_cmd     = float(np.clip(u_cmd[0], A_MIN, A_MAX))
             delta_cmd = float(np.clip(u_cmd[1], -DELTA_LIM, DELTA_LIM))
 
